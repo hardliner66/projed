@@ -1,8 +1,12 @@
-import { Component } from 'solid-js'
+import { Component, createMemo, createSignal, Show, onMount, onCleanup } from 'solid-js'
 import { createIrModel } from '../ir/model'
 import NodeRenderer from './NodeRenderer'
 import Sidebar from './Sidebar'
 import ProjectionEditor from './ProjectionEditor'
+import InsertMenu, { type InsertContext } from './InsertMenu'
+import { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp } from '../editor/state'
+import { buildNavOrder, getParentContext } from '../editor/navigation'
+import { ROLE_ALLOWED_KINDS, CONCEPT_CHILD_SLOTS, makeNode } from '../editor/concepts'
 
 const initialAst = {
   id: 'file-1',
@@ -38,6 +42,159 @@ const initialAst = {
 
 const App: Component = () => {
   const { model, applyCommand } = createIrModel(initialAst)
+  const [insertCtx, setInsertCtx] = createSignal<InsertContext | null>(null)
+  const [insertInitialQuery, setInsertInitialQuery] = createSignal('')
+
+  function isEditingInput() {
+    const el = document.activeElement
+    return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+  }
+
+  // ── Navigation ──────────────────────────────────────────────────────────────
+
+  function selectNext() {
+    const order = buildNavOrder(model)
+    const cur = selectedNodeId()
+    if (!cur) { setSelectedNodeId(order[1] ?? null); return }
+    const idx = order.indexOf(cur)
+    if (idx >= 0 && idx + 1 < order.length) setSelectedNodeId(order[idx + 1])
+  }
+
+  function selectPrev() {
+    const order = buildNavOrder(model)
+    const cur = selectedNodeId()
+    if (!cur) return
+    const idx = order.indexOf(cur)
+    if (idx > 1) setSelectedNodeId(order[idx - 1])
+  }
+
+  function selectParent() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const ctx = getParentContext(model, nodeId)
+    if (ctx) setSelectedNodeId(ctx.parentId)
+  }
+
+  function selectFirstChild() {
+    const nodeId = selectedNodeId()
+    if (!nodeId) return
+    const node = model.nodes[nodeId]
+    if (!node) return
+    for (const children of Object.values(node.children)) {
+      if (children.length > 0) { setSelectedNodeId(children[0]); return }
+    }
+  }
+
+  // ── Insert helpers ───────────────────────────────────────────────────────────
+
+  function openInsertSibling(ch: string, above = false) {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const ctx = getParentContext(model, nodeId)
+    if (!ctx) return
+    const allowed = ROLE_ALLOWED_KINDS[ctx.role] ?? []
+    if (!allowed.length) return
+    const index = above ? ctx.index : ctx.index + 1
+    setInsertCtx({ parentId: ctx.parentId, role: ctx.role, index, allowedKinds: allowed })
+    setInsertInitialQuery(ch)
+  }
+
+  function openInsertChild() {
+    const nodeId = selectedNodeId()
+    if (!nodeId) return
+    const node = model.nodes[nodeId]
+    if (!node) return
+    const slots = CONCEPT_CHILD_SLOTS[node.kind] ?? {}
+    for (const [role, allowed] of Object.entries(slots)) {
+      if (allowed.length > 0) {
+        const index = (node.children[role] ?? []).length
+        setInsertCtx({ parentId: nodeId, role, index, allowedKinds: allowed })
+        setInsertInitialQuery('')
+        return
+      }
+    }
+  }
+
+  // kept for the "type any char to insert" fallback
+  function openInsert(ch: string) { openInsertSibling(ch, false) }
+
+  function handleInsert(kind: string) {
+    const ctx = insertCtx()
+    if (!ctx) return
+    const node = makeNode(kind)
+    applyCommand({ type: 'INSERT_CHILD', parentId: ctx.parentId, role: ctx.role, child: node, index: ctx.index })
+    setInsertCtx(null)
+    setInsertInitialQuery('')
+    setSelectedNodeId(node.id)
+    const firstProp = Object.keys(node.props)[0]
+    if (firstProp) setEditingNodeProp({ nodeId: node.id, propName: firstProp })
+  }
+
+  function deleteSelected() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const ctx = getParentContext(model, nodeId)
+    if (!ctx) return
+    const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
+    const idx = siblings.indexOf(nodeId)
+    let nextSelected: string | null
+    if (idx + 1 < siblings.length) nextSelected = siblings[idx + 1]
+    else if (idx > 0) nextSelected = siblings[idx - 1]
+    else nextSelected = ctx.parentId
+    applyCommand({ type: 'DELETE_NODE', nodeId, parentId: ctx.parentId, role: ctx.role })
+    setSelectedNodeId(nextSelected)
+  }
+
+  function startEditingFirstProp() {
+    const nodeId = selectedNodeId()
+    if (!nodeId) return
+    const node = model.nodes[nodeId]
+    if (!node) return
+    const firstProp = Object.keys(node.props)[0]
+    if (firstProp) setEditingNodeProp({ nodeId, propName: firstProp })
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if (insertCtx()) return
+    if (isEditingInput()) return
+    if (e.ctrlKey || e.metaKey || e.altKey) return
+    switch (e.key) {
+      // ── Movement ──
+      case 'ArrowDown': case 'j': e.preventDefault(); selectNext();       break
+      case 'ArrowUp':   case 'k': e.preventDefault(); selectPrev();       break
+      case 'ArrowLeft': case 'h': e.preventDefault(); selectParent();     break
+      case 'ArrowRight':case 'l': e.preventDefault(); selectFirstChild(); break
+      // ── Edit ──
+      case 'e':
+      case 'Enter':
+      case 'F2':        e.preventDefault(); startEditingFirstProp(); break
+      // ── Insert ──
+      case 'i':         e.preventDefault(); openInsertChild();            break
+      case 'o':         e.preventDefault(); openInsertSibling('', false); break
+      case 'O':         e.preventDefault(); openInsertSibling('', true);  break
+      // ── Delete ──
+      case 'Backspace':
+      case 'Delete':    e.preventDefault(); deleteSelected(); break
+      // ── Misc ──
+      case 'Escape':    setSelectedNodeId(null); break
+      default:
+        if (e.key.length === 1) openInsert(e.key)
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener('keydown', onKeyDown)
+    onCleanup(() => window.removeEventListener('keydown', onKeyDown))
+  })
+
+  const statusText = createMemo(() => {
+    if (insertCtx()) return ''
+    if (editingNodeProp()) return 'Enter confirm · Esc cancel'
+    const sel = selectedNodeId()
+    if (!sel) return 'Click or hjkl/↑↓←→ to select a node'
+    if (sel === model.rootId) return 'hjkl navigate'
+    return 'hjkl/↑↓←→ navigate · e edit · i insert child · o sibling below · O sibling above · Del delete'
+  })
 
   return (
     <div class="app">
@@ -46,11 +203,22 @@ const App: Component = () => {
         <ProjectionEditor />
       </header>
       <div class="workspace">
-        <main class="editor-surface" onClick={() => {}}>
+        <main class="editor-surface" onClick={() => setSelectedNodeId(null)}>
           <NodeRenderer nodeId={model.rootId} model={model} onCommand={applyCommand} />
         </main>
         <Sidebar model={model} onCommand={applyCommand} />
       </div>
+      <div class="status-bar">{statusText()}</div>
+      <Show when={insertCtx()}>
+        {(ctx) => (
+          <InsertMenu
+            context={ctx()}
+            initialQuery={insertInitialQuery()}
+            onSelect={handleInsert}
+            onClose={() => { setInsertCtx(null); setInsertInitialQuery('') }}
+          />
+        )}
+      </Show>
     </div>
   )
 }

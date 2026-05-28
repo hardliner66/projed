@@ -71,7 +71,15 @@ export function createIrModel(initialRoot: any) {
           const siblings = m.nodes[cmd.parentId].children[cmd.role] ?? []
           const idx = siblings.indexOf(cmd.nodeId)
           if (idx >= 0) siblings.splice(idx, 1)
-          delete m.nodes[cmd.nodeId]
+          function cascadeDelete(id: string) {
+            const n = m.nodes[id]
+            if (!n) return
+            for (const kids of Object.values(n.children)) {
+              for (const kid of kids) cascadeDelete(kid)
+            }
+            delete m.nodes[id]
+          }
+          cascadeDelete(cmd.nodeId)
           break
         }
         case 'MOVE_CHILD': {

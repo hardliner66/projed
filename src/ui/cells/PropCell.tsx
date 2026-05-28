@@ -1,7 +1,6 @@
 import { Component, createEffect, createSignal } from 'solid-js'
-import type { IrNode } from '../../ir/types'
-import type { EditCommand } from '../../ir/types'
-import { setSelectedNodeId } from '../../editor/state'
+import type { IrNode, EditCommand } from '../../ir/types'
+import { setSelectedNodeId, editingNodeProp, setEditingNodeProp } from '../../editor/state'
 
 interface Props {
   node: IrNode
@@ -13,13 +12,25 @@ interface Props {
 const PropCell: Component<Props> = (props) => {
   const value = () => String(props.node.props[props.propName] ?? '')
   const [editing, setEditing] = createSignal(false)
-  let inputRef!: HTMLInputElement | HTMLTextAreaElement
+
+  createEffect(() => {
+    const ep = editingNodeProp()
+    if (ep?.nodeId === props.node.id && ep?.propName === props.propName) {
+      setEditing(true)
+    }
+  })
 
   function commit(val: string) {
     setEditing(false)
+    setEditingNodeProp(null)
     if (val !== String(props.node.props[props.propName] ?? '')) {
       props.onCommand({ type: 'SET_PROP', nodeId: props.node.id, prop: props.propName, value: val })
     }
+  }
+
+  function cancelEdit() {
+    setEditing(false)
+    setEditingNodeProp(null)
   }
 
   return (
@@ -30,22 +41,20 @@ const PropCell: Component<Props> = (props) => {
       {editing() ? (
         props.multiline ? (
           <textarea
-            ref={inputRef as HTMLTextAreaElement}
             value={value()}
             onBlur={(e) => commit(e.currentTarget.value)}
-            onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false) }}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); cancelEdit() } }}
             autofocus
             rows={3}
           />
         ) : (
           <input
-            ref={inputRef as HTMLInputElement}
             type="text"
             value={value()}
             onBlur={(e) => commit(e.currentTarget.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') commit(e.currentTarget.value)
-              if (e.key === 'Escape') setEditing(false)
+              if (e.key === 'Enter') { e.stopPropagation(); commit(e.currentTarget.value) }
+              if (e.key === 'Escape') { e.stopPropagation(); cancelEdit() }
             }}
             autofocus
             size={Math.max(value().length + 2, 4)}

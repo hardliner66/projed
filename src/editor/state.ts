@@ -1,13 +1,12 @@
 import { createSignal } from 'solid-js'
 import type { NodeId } from '../ir/types'
 
-export interface Cursor {
+export interface EditingProp {
   nodeId: NodeId
-  prop?: string
-  offset?: number
+  propName: string
 }
 
 const [selectedNodeId, setSelectedNodeId] = createSignal<NodeId | null>(null)
-const [cursor, setCursor] = createSignal<Cursor | null>(null)
+const [editingNodeProp, setEditingNodeProp] = createSignal<EditingProp | null>(null)
 
-export { selectedNodeId, setSelectedNodeId, cursor, setCursor }
+export { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp }
