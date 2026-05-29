@@ -70,6 +70,22 @@ body {
   background: var(--selected);
 }
 
+.toolbar-select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.toolbar-select:hover {
+  background: var(--selected);
+}
+
 .workspace {
   display: flex;
   flex: 1;

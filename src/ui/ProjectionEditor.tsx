@@ -1,5 +1,8 @@
-import { Component, createSignal, Show } from 'solid-js'
-import { getProjectionJson, loadProjectionJson } from '../projection/registry'
+import { Component, createSignal, For, Show } from 'solid-js'
+import {
+  getProjectionJson, loadProjectionJson,
+  PRESET_NAMES, activePresetName, switchPreset, resetActivePreset,
+} from '../projection/registry'
 
 const ProjectionEditor: Component = () => {
   const [open, setOpen] = createSignal(false)
@@ -22,14 +25,29 @@ const ProjectionEditor: Component = () => {
     }
   }
 
+  function onReset() {
+    resetActivePreset()
+    setText(getProjectionJson())
+    setError('')
+  }
+
   return (
     <>
-      <button class="toolbar-btn" onClick={onOpen}>Edit Projections</button>
+      <select
+        class="toolbar-select"
+        value={activePresetName()}
+        onChange={(e) => switchPreset(e.currentTarget.value)}
+      >
+        <For each={PRESET_NAMES}>
+          {(name) => <option value={name}>{name}</option>}
+        </For>
+      </select>
+      <button class="toolbar-btn" onClick={onOpen}>Edit</button>
       <Show when={open()}>
         <div class="modal-backdrop" onClick={() => setOpen(false)}>
           <div class="modal" onClick={(e) => e.stopPropagation()}>
             <div class="modal-header">
-              <span>Projection Map (JSON)</span>
+              <span>Projection — {activePresetName()}</span>
               <button onClick={() => setOpen(false)}>✕</button>
             </div>
             <textarea
@@ -43,6 +61,7 @@ const ProjectionEditor: Component = () => {
             </Show>
             <div class="modal-footer">
               <button onClick={onApply}>Apply</button>
+              <button onClick={onReset}>Reset to Default</button>
               <button onClick={() => setOpen(false)}>Cancel</button>
             </div>
           </div>
