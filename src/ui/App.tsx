@@ -21,7 +21,7 @@ const initialAst = {
         children: {
           fields: [
             { id: 'field-name', kind: 'FieldDecl', props: { name: 'name', type: 'String' }, children: {} },
-            { id: 'field-age',  kind: 'FieldDecl', props: { name: 'age',  type: 'Int'    }, children: {} },
+            { id: 'field-age', kind: 'FieldDecl', props: { name: 'age', type: 'Int' }, children: {} },
           ],
         },
       },
@@ -33,7 +33,80 @@ const initialAst = {
           params: [
             { id: 'param-who', kind: 'Parameter', props: { name: 'who', type: 'String' }, children: {} },
           ],
-          body: [],
+          body: [
+            {
+              id: 'stmt-message',
+              kind: 'LetStmt',
+              props: { name: 'message' },
+              children: {
+                value: [
+                  {
+                    id: 'expr-greeting',
+                    kind: 'BinaryExpr',
+                    props: { op: '+' },
+                    children: {
+                      left: [{ id: 'lit-hello', kind: 'LiteralExpr', props: { value: '"Hello, "' }, children: {} }],
+                      right: [{ id: 'id-who', kind: 'IdentifierExpr', props: { name: 'who' }, children: {} }],
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              id: 'stmt-if',
+              kind: 'IfStmt',
+              props: {},
+              children: {
+                condition: [{ id: 'id-who-cond', kind: 'IdentifierExpr', props: { name: 'who' }, children: {} }],
+                thenBody: [
+                  {
+                    id: 'stmt-call-print',
+                    kind: 'ExprStmt',
+                    props: {},
+                    children: {
+                      expr: [
+                        {
+                          id: 'call-print',
+                          kind: 'CallExpr',
+                          props: {},
+                          children: {
+                            callee: [{ id: 'id-print', kind: 'IdentifierExpr', props: { name: 'print' }, children: {} }],
+                            args: [{ id: 'id-message', kind: 'IdentifierExpr', props: { name: 'message' }, children: {} }],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+                elseBody: [
+                  {
+                    id: 'stmt-return-fallback',
+                    kind: 'ReturnStmt',
+                    props: {},
+                    children: {
+                      value: [{ id: 'lit-fallback', kind: 'LiteralExpr', props: { value: '"Hello"' }, children: {} }],
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              id: 'stmt-return-message',
+              kind: 'ReturnStmt',
+              props: {},
+              children: {
+                value: [{ id: 'id-message-ret', kind: 'IdentifierExpr', props: { name: 'message' }, children: {} }],
+              },
+            },
+          ],
+        },
+      },
+      {
+        id: 'let-version',
+        kind: 'LetDecl',
+        props: { name: 'version' },
+        children: {
+          value: [{ id: 'lit-version', kind: 'LiteralExpr', props: { value: '1' }, children: {} }],
         },
       },
     ],
@@ -160,23 +233,23 @@ const App: Component = () => {
     if (e.ctrlKey || e.metaKey || e.altKey) return
     switch (e.key) {
       // ── Movement ──
-      case 'ArrowDown': case 'j': e.preventDefault(); selectNext();       break
-      case 'ArrowUp':   case 'k': e.preventDefault(); selectPrev();       break
-      case 'ArrowLeft': case 'h': e.preventDefault(); selectParent();     break
-      case 'ArrowRight':case 'l': e.preventDefault(); selectFirstChild(); break
+      case 'ArrowDown': case 'j': e.preventDefault(); selectNext(); break
+      case 'ArrowUp': case 'k': e.preventDefault(); selectPrev(); break
+      case 'ArrowLeft': case 'h': e.preventDefault(); selectParent(); break
+      case 'ArrowRight': case 'l': e.preventDefault(); selectFirstChild(); break
       // ── Edit ──
       case 'e':
       case 'Enter':
-      case 'F2':        e.preventDefault(); startEditingFirstProp(); break
+      case 'F2': e.preventDefault(); startEditingFirstProp(); break
       // ── Insert ──
-      case 'i':         e.preventDefault(); openInsertChild();            break
-      case 'o':         e.preventDefault(); openInsertSibling('', false); break
-      case 'O':         e.preventDefault(); openInsertSibling('', true);  break
+      case 'i': e.preventDefault(); openInsertChild(); break
+      case 'o': e.preventDefault(); openInsertSibling('', false); break
+      case 'O': e.preventDefault(); openInsertSibling('', true); break
       // ── Delete ──
       case 'Backspace':
-      case 'Delete':    e.preventDefault(); deleteSelected(); break
+      case 'Delete': e.preventDefault(); deleteSelected(); break
       // ── Misc ──
-      case 'Escape':    setSelectedNodeId(null); break
+      case 'Escape': setSelectedNodeId(null); break
       default:
         if (e.key.length === 1) openInsert(e.key)
     }

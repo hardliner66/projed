@@ -12,6 +12,13 @@ export function genId(prefix: string): string {
 }
 
 export const CONCEPTS: Record<string, ConceptDef> = {
+  LetDecl: {
+    kind: 'LetDecl',
+    label: 'let',
+    aliases: ['const', 'var', 'binding', 'value'],
+    defaultProps: { name: 'value' },
+    defaultChildren: { value: [] },
+  },
   StructDecl: {
     kind: 'StructDecl',
     label: 'struct',
@@ -40,20 +47,116 @@ export const CONCEPTS: Record<string, ConceptDef> = {
     defaultProps: { name: 'param', type: 'String' },
     defaultChildren: {},
   },
+  LetStmt: {
+    kind: 'LetStmt',
+    label: 'let',
+    aliases: ['const', 'var', 'binding'],
+    defaultProps: { name: 'value' },
+    defaultChildren: { value: [] },
+  },
+  ReturnStmt: {
+    kind: 'ReturnStmt',
+    label: 'return',
+    aliases: ['ret', 'yield'],
+    defaultProps: {},
+    defaultChildren: { value: [] },
+  },
+  ExprStmt: {
+    kind: 'ExprStmt',
+    label: 'expr',
+    aliases: ['statement', 'call', 'invoke'],
+    defaultProps: {},
+    defaultChildren: { expr: [] },
+  },
+  IfStmt: {
+    kind: 'IfStmt',
+    label: 'if',
+    aliases: ['conditional', 'branch'],
+    defaultProps: {},
+    defaultChildren: { condition: [], thenBody: [], elseBody: [] },
+  },
+  WhileStmt: {
+    kind: 'WhileStmt',
+    label: 'while',
+    aliases: ['loop', 'repeat'],
+    defaultProps: {},
+    defaultChildren: { condition: [], body: [] },
+  },
+  IdentifierExpr: {
+    kind: 'IdentifierExpr',
+    label: 'id',
+    aliases: ['identifier', 'name', 'symbol', 'variable'],
+    defaultProps: { name: 'x' },
+    defaultChildren: {},
+  },
+  LiteralExpr: {
+    kind: 'LiteralExpr',
+    label: 'literal',
+    aliases: ['constant', 'value', 'number', 'string', 'bool'],
+    defaultProps: { value: '0' },
+    defaultChildren: {},
+  },
+  BinaryExpr: {
+    kind: 'BinaryExpr',
+    label: 'binary',
+    aliases: ['operation', 'op', 'infix'],
+    defaultProps: { op: '+' },
+    defaultChildren: { left: [], right: [] },
+  },
+  CallExpr: {
+    kind: 'CallExpr',
+    label: 'call',
+    aliases: ['invoke', 'application', 'send'],
+    defaultProps: {},
+    defaultChildren: { callee: [], args: [] },
+  },
+  AssignExpr: {
+    kind: 'AssignExpr',
+    label: 'assign',
+    aliases: ['set', 'update', 'mutation'],
+    defaultProps: {},
+    defaultChildren: { target: [], value: [] },
+  },
 }
 
 export const ROLE_ALLOWED_KINDS: Record<string, string[]> = {
-  declarations: ['StructDecl', 'FnDecl'],
+  declarations: ['StructDecl', 'FnDecl', 'LetDecl'],
   fields: ['FieldDecl'],
   params: ['Parameter'],
-  body: [],
+  body: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
+  condition: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'],
+  expr: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'],
+  value: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'],
+  left: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'],
+  right: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'],
+  callee: ['IdentifierExpr', 'CallExpr'],
+  args: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'],
+  target: ['IdentifierExpr'],
+  thenBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
+  elseBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
 }
 
 // Child slots per concept kind — used for 'i' (insert child) navigation
 export const CONCEPT_CHILD_SLOTS: Record<string, Record<string, string[]>> = {
-  File:       { declarations: ['StructDecl', 'FnDecl'] },
+  File: { declarations: ['StructDecl', 'FnDecl', 'LetDecl'] },
   StructDecl: { fields: ['FieldDecl'] },
-  FnDecl:     { params: ['Parameter'] },
+  FnDecl: { params: ['Parameter'], body: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'] },
+  LetDecl: { value: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'] },
+  LetStmt: { value: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'] },
+  ReturnStmt: { value: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'] },
+  ExprStmt: { expr: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'] },
+  IfStmt: {
+    condition: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'],
+    thenBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
+    elseBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
+  },
+  WhileStmt: {
+    condition: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'],
+    body: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
+  },
+  BinaryExpr: { left: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'], right: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'] },
+  CallExpr: { callee: ['IdentifierExpr', 'CallExpr'], args: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'] },
+  AssignExpr: { target: ['IdentifierExpr'], value: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr'] },
 }
 
 export function makeNode(kind: string): any {

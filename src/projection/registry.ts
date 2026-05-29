@@ -5,49 +5,191 @@ const defaultProjections: ProjectionMap = {
   File: [
     { type: 'childList', name: 'declarations', indent: false },
   ],
-  StructDecl: [
-    { type: 'block', direction: 'col', children: [
-      { type: 'block', direction: 'row', children: [
-        { type: 'label', text: 'struct ', style: 'keyword' },
+  LetDecl: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'label', text: 'let ', style: 'keyword' },
         { type: 'prop', name: 'name' },
-        { type: 'label', text: ' {', style: 'punct' },
-      ]},
-      { type: 'indent', children: [
-        { type: 'childList', name: 'fields', indent: true },
-      ]},
-      { type: 'label', text: '}', style: 'punct' },
-    ]},
+        { type: 'label', text: ' = ', style: 'punct' },
+        { type: 'child', name: 'value' },
+        { type: 'label', text: ';', style: 'punct' },
+      ]
+    },
+  ],
+  StructDecl: [
+    {
+      type: 'block', direction: 'col', children: [
+        {
+          type: 'block', direction: 'row', children: [
+            { type: 'label', text: 'struct ', style: 'keyword' },
+            { type: 'prop', name: 'name' },
+            { type: 'label', text: ' {', style: 'punct' },
+          ]
+        },
+        {
+          type: 'indent', children: [
+            { type: 'childList', name: 'fields', indent: true },
+          ]
+        },
+        { type: 'label', text: '}', style: 'punct' },
+      ]
+    },
   ],
   FieldDecl: [
-    { type: 'block', direction: 'row', children: [
-      { type: 'prop', name: 'name' },
-      { type: 'label', text: ': ', style: 'punct' },
-      { type: 'prop', name: 'type' },
-      { type: 'label', text: ';', style: 'punct' },
-    ]},
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'prop', name: 'name' },
+        { type: 'label', text: ': ', style: 'punct' },
+        { type: 'prop', name: 'type' },
+        { type: 'label', text: ';', style: 'punct' },
+      ]
+    },
   ],
   FnDecl: [
-    { type: 'block', direction: 'col', children: [
-      { type: 'block', direction: 'row', children: [
-        { type: 'label', text: 'fn ', style: 'keyword' },
-        { type: 'prop', name: 'name' },
-        { type: 'label', text: '(', style: 'punct' },
-        { type: 'childList', name: 'params' },
-        { type: 'label', text: ')', style: 'punct' },
-        { type: 'label', text: ' {', style: 'punct' },
-      ]},
-      { type: 'indent', children: [
-        { type: 'childList', name: 'body', indent: true },
-      ]},
-      { type: 'label', text: '}', style: 'punct' },
-    ]},
+    {
+      type: 'block', direction: 'col', children: [
+        {
+          type: 'block', direction: 'row', children: [
+            { type: 'label', text: 'fn ', style: 'keyword' },
+            { type: 'prop', name: 'name' },
+            { type: 'label', text: '(', style: 'punct' },
+            { type: 'childList', name: 'params', inline: true, separator: { type: 'label', text: ', ', style: 'punct' } },
+            { type: 'label', text: ')', style: 'punct' },
+            { type: 'label', text: ' {', style: 'punct' },
+          ]
+        },
+        {
+          type: 'indent', children: [
+            { type: 'childList', name: 'body', indent: true },
+          ]
+        },
+        { type: 'label', text: '}', style: 'punct' },
+      ]
+    },
   ],
   Parameter: [
-    { type: 'block', direction: 'row', children: [
-      { type: 'prop', name: 'name' },
-      { type: 'label', text: ': ', style: 'punct' },
-      { type: 'prop', name: 'type' },
-    ]},
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'prop', name: 'name' },
+        { type: 'label', text: ': ', style: 'punct' },
+        { type: 'prop', name: 'type' },
+      ]
+    },
+  ],
+  LetStmt: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'label', text: 'let ', style: 'keyword' },
+        { type: 'prop', name: 'name' },
+        { type: 'label', text: ' = ', style: 'punct' },
+        { type: 'child', name: 'value' },
+        { type: 'label', text: ';', style: 'punct' },
+      ]
+    },
+  ],
+  ReturnStmt: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'label', text: 'return ', style: 'keyword' },
+        { type: 'child', name: 'value' },
+        { type: 'label', text: ';', style: 'punct' },
+      ]
+    },
+  ],
+  ExprStmt: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'child', name: 'expr' },
+        { type: 'label', text: ';', style: 'punct' },
+      ]
+    },
+  ],
+  IfStmt: [
+    {
+      type: 'block', direction: 'col', children: [
+        {
+          type: 'block', direction: 'row', children: [
+            { type: 'label', text: 'if ', style: 'keyword' },
+            { type: 'child', name: 'condition' },
+            { type: 'label', text: ' {', style: 'punct' },
+          ]
+        },
+        {
+          type: 'indent', children: [
+            { type: 'childList', name: 'thenBody', indent: true },
+          ]
+        },
+        { type: 'label', text: '}', style: 'punct' },
+        {
+          type: 'block', direction: 'row', children: [
+            { type: 'label', text: 'else {', style: 'keyword' },
+          ]
+        },
+        {
+          type: 'indent', children: [
+            { type: 'childList', name: 'elseBody', indent: true },
+          ]
+        },
+        { type: 'label', text: '}', style: 'punct' },
+      ]
+    },
+  ],
+  WhileStmt: [
+    {
+      type: 'block', direction: 'col', children: [
+        {
+          type: 'block', direction: 'row', children: [
+            { type: 'label', text: 'while ', style: 'keyword' },
+            { type: 'child', name: 'condition' },
+            { type: 'label', text: ' {', style: 'punct' },
+          ]
+        },
+        {
+          type: 'indent', children: [
+            { type: 'childList', name: 'body', indent: true },
+          ]
+        },
+        { type: 'label', text: '}', style: 'punct' },
+      ]
+    },
+  ],
+  IdentifierExpr: [
+    { type: 'prop', name: 'name' },
+  ],
+  LiteralExpr: [
+    { type: 'prop', name: 'value' },
+  ],
+  BinaryExpr: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'label', text: '(', style: 'punct' },
+        { type: 'child', name: 'left' },
+        { type: 'label', text: ' ', style: 'punct' },
+        { type: 'prop', name: 'op' },
+        { type: 'label', text: ' ', style: 'punct' },
+        { type: 'child', name: 'right' },
+        { type: 'label', text: ')', style: 'punct' },
+      ]
+    },
+  ],
+  CallExpr: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'child', name: 'callee' },
+        { type: 'label', text: '(', style: 'punct' },
+        { type: 'childList', name: 'args', inline: true, separator: { type: 'label', text: ', ', style: 'punct' } },
+        { type: 'label', text: ')', style: 'punct' },
+      ]
+    },
+  ],
+  AssignExpr: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'child', name: 'target' },
+        { type: 'label', text: ' = ', style: 'punct' },
+        { type: 'child', name: 'value' },
+      ]
+    },
   ],
 }
 

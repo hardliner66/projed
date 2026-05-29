@@ -61,11 +61,11 @@ const CellRenderer: Component<CellProps> = (props) => {
 
   return (
     <Switch>
-      <Match when={cell().type === 'label' && cell() as Extract<CellDef, {type:'label'}>}>
+      <Match when={cell().type === 'label' && cell() as Extract<CellDef, { type: 'label' }>}>
         {(c) => <LabelCell text={c().text} style={c().style} />}
       </Match>
 
-      <Match when={cell().type === 'prop' && cell() as Extract<CellDef, {type:'prop'}>}>
+      <Match when={cell().type === 'prop' && cell() as Extract<CellDef, { type: 'prop' }>}>
         {(c) => (
           <PropCell
             node={props.node}
@@ -76,7 +76,7 @@ const CellRenderer: Component<CellProps> = (props) => {
         )}
       </Match>
 
-      <Match when={cell().type === 'child' && cell() as Extract<CellDef, {type:'child'}>}>
+      <Match when={cell().type === 'child' && cell() as Extract<CellDef, { type: 'child' }>}>
         {(c) => {
           const childId = () => props.node.children[c().name]?.[0]
           return (
@@ -87,14 +87,24 @@ const CellRenderer: Component<CellProps> = (props) => {
         }}
       </Match>
 
-      <Match when={cell().type === 'childList' && cell() as Extract<CellDef, {type:'childList'}>}>
+      <Match when={cell().type === 'childList' && cell() as Extract<CellDef, { type: 'childList' }>}>
         {(c) => {
           const ids = () => props.node.children[c().name] ?? []
           return (
-            <div class={`child-list ${c().indent ? 'indented' : ''}`}>
+            <div class={`child-list ${c().indent ? 'indented' : ''} ${c().inline ? 'inline' : ''}`}>
               <For each={ids()}>
-                {(childId) => (
-                  <NodeRenderer nodeId={childId} model={props.model} onCommand={props.onCommand} />
+                {(childId, i) => (
+                  <>
+                    <NodeRenderer nodeId={childId} model={props.model} onCommand={props.onCommand} />
+                    <Show when={c().separator && i() < ids().length - 1}>
+                      <CellRenderer
+                        cell={c().separator!}
+                        node={props.node}
+                        model={props.model}
+                        onCommand={props.onCommand}
+                      />
+                    </Show>
+                  </>
                 )}
               </For>
               <Show when={ids().length === 0}>
@@ -105,7 +115,7 @@ const CellRenderer: Component<CellProps> = (props) => {
         }}
       </Match>
 
-      <Match when={cell().type === 'block' && cell() as Extract<CellDef, {type:'block'}>}>
+      <Match when={cell().type === 'block' && cell() as Extract<CellDef, { type: 'block' }>}>
         {(c) => (
           <div class={`cell-block dir-${c().direction ?? 'row'}`}>
             <CellListRenderer cells={c().children} node={props.node} model={props.model} onCommand={props.onCommand} />
@@ -113,7 +123,7 @@ const CellRenderer: Component<CellProps> = (props) => {
         )}
       </Match>
 
-      <Match when={cell().type === 'indent' && cell() as Extract<CellDef, {type:'indent'}>}>
+      <Match when={cell().type === 'indent' && cell() as Extract<CellDef, { type: 'indent' }>}>
         {(c) => (
           <div class="cell-indent">
             <CellListRenderer cells={c().children} node={props.node} model={props.model} onCommand={props.onCommand} />
