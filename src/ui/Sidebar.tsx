@@ -24,6 +24,13 @@ const Sidebar: Component<Props> = (props) => {
               <Row label="Kind" value={n().kind} />
             </Section>
 
+            <Show when={n().analysis?.declaredType || n().analysis?.inferredType}>
+              <Section title="Types">
+                <Row label="Declared" value={n().analysis?.declaredType ?? '—'} />
+                <Row label="Inferred" value={n().analysis?.inferredType ?? '—'} />
+              </Section>
+            </Show>
+
             <Show when={Object.keys(n().props).length > 0}>
               <Section title="Properties">
                 <For each={Object.entries(n().props)}>
@@ -60,7 +67,13 @@ const Sidebar: Component<Props> = (props) => {
             <Show when={Object.keys(n().refs).length > 0}>
               <Section title="References">
                 <For each={Object.entries(n().refs)}>
-                  {([role, target]) => <Row label={role} value={target} />}
+                  {([role, target]) => {
+                    const resolved = props.model.nodes[target]
+                    const value = resolved
+                      ? `${resolved.kind}${resolved.props.name ? ` ${String(resolved.props.name)}` : ''}`
+                      : target
+                    return <Row label={role} value={value} />
+                  }}
                 </For>
               </Section>
             </Show>

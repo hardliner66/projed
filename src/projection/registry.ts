@@ -10,6 +10,8 @@ const defaultProjections: ProjectionMap = {
       type: 'block', direction: 'row', children: [
         { type: 'label', text: 'let ', style: 'keyword' },
         { type: 'prop', name: 'name' },
+        { type: 'label', text: ': ', style: 'punct' },
+        { type: 'prop', name: 'type' },
         { type: 'label', text: ' = ', style: 'punct' },
         { type: 'child', name: 'value' },
         { type: 'label', text: ';', style: 'punct' },
@@ -55,6 +57,8 @@ const defaultProjections: ProjectionMap = {
             { type: 'label', text: '(', style: 'punct' },
             { type: 'childList', name: 'params', inline: true, separator: { type: 'label', text: ', ', style: 'punct' } },
             { type: 'label', text: ')', style: 'punct' },
+            { type: 'label', text: ': ', style: 'punct' },
+            { type: 'prop', name: 'returnType' },
             { type: 'label', text: ' {', style: 'punct' },
           ]
         },
@@ -81,6 +85,8 @@ const defaultProjections: ProjectionMap = {
       type: 'block', direction: 'row', children: [
         { type: 'label', text: 'let ', style: 'keyword' },
         { type: 'prop', name: 'name' },
+        { type: 'label', text: ': ', style: 'punct' },
+        { type: 'prop', name: 'type' },
         { type: 'label', text: ' = ', style: 'punct' },
         { type: 'child', name: 'value' },
         { type: 'label', text: ';', style: 'punct' },
@@ -150,6 +156,43 @@ const defaultProjections: ProjectionMap = {
           ]
         },
         { type: 'label', text: '}', style: 'punct' },
+      ]
+    },
+  ],
+  ForStmt: [
+    {
+      type: 'block', direction: 'col', children: [
+        {
+          type: 'block', direction: 'row', children: [
+            { type: 'label', text: 'for ', style: 'keyword' },
+            { type: 'prop', name: 'item' },
+            { type: 'label', text: ' in ', style: 'keyword' },
+            { type: 'child', name: 'iterable' },
+            { type: 'label', text: ' {', style: 'punct' },
+          ]
+        },
+        {
+          type: 'indent', children: [
+            { type: 'childList', name: 'body', indent: true },
+          ]
+        },
+        { type: 'label', text: '}', style: 'punct' },
+      ]
+    },
+  ],
+  BreakStmt: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'label', text: 'break', style: 'keyword' },
+        { type: 'label', text: ';', style: 'punct' },
+      ]
+    },
+  ],
+  ContinueStmt: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'label', text: 'continue', style: 'keyword' },
+        { type: 'label', text: ';', style: 'punct' },
       ]
     },
   ],

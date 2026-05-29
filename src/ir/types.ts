@@ -5,12 +5,18 @@ export type RoleId = string
 
 export type Value = string | number | boolean | null
 
+export interface NodeAnalysis {
+  declaredType?: string
+  inferredType?: string
+}
+
 export interface IrNode {
   id: NodeId
   kind: ConceptId
   props: Record<PropertyId, Value>
   children: Record<RoleId, NodeId[]>
   refs: Record<RoleId, NodeId>
+  analysis?: NodeAnalysis
 }
 
 export interface IrModel {

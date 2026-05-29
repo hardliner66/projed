@@ -28,16 +28,58 @@ const initialAst = {
       {
         id: 'fn-greet',
         kind: 'FnDecl',
-        props: { name: 'greet' },
+        props: { name: 'greet', returnType: 'String' },
         children: {
           params: [
             { id: 'param-who', kind: 'Parameter', props: { name: 'who', type: 'String' }, children: {} },
           ],
           body: [
             {
+              id: 'stmt-loop',
+              kind: 'ForStmt',
+              props: { item: 'item' },
+              children: {
+                iterable: [
+                  {
+                    id: 'call-range',
+                    kind: 'CallExpr',
+                    props: {},
+                    children: {
+                      callee: [{ id: 'id-range', kind: 'IdentifierExpr', props: { name: 'range' }, children: {} }],
+                      args: [
+                        { id: 'lit-zero', kind: 'LiteralExpr', props: { value: '0' }, children: {} },
+                        { id: 'lit-three', kind: 'LiteralExpr', props: { value: '3' }, children: {} },
+                      ],
+                    },
+                  },
+                ],
+                body: [
+                  {
+                    id: 'stmt-loop-print',
+                    kind: 'ExprStmt',
+                    props: {},
+                    children: {
+                      expr: [
+                        {
+                          id: 'call-loop-print',
+                          kind: 'CallExpr',
+                          props: {},
+                          children: {
+                            callee: [{ id: 'id-print-loop', kind: 'IdentifierExpr', props: { name: 'print' }, children: {} }],
+                            args: [{ id: 'id-item', kind: 'IdentifierExpr', props: { name: 'item' }, children: {} }],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                  { id: 'stmt-continue', kind: 'ContinueStmt', props: {}, children: {} },
+                ],
+              },
+            },
+            {
               id: 'stmt-message',
               kind: 'LetStmt',
-              props: { name: 'message' },
+              props: { name: 'message', type: 'String' },
               children: {
                 value: [
                   {
@@ -104,9 +146,23 @@ const initialAst = {
       {
         id: 'let-version',
         kind: 'LetDecl',
-        props: { name: 'version' },
+        props: { name: 'version', type: 'Number' },
         children: {
           value: [{ id: 'lit-version', kind: 'LiteralExpr', props: { value: '1' }, children: {} }],
+        },
+      },
+      {
+        id: 'fn-range',
+        kind: 'FnDecl',
+        props: { name: 'range', returnType: 'Iterator<Number>' },
+        children: {
+          params: [
+            { id: 'param-start', kind: 'Parameter', props: { name: 'start', type: 'Number' }, children: {} },
+            { id: 'param-end', kind: 'Parameter', props: { name: 'end', type: 'Number' }, children: {} },
+          ],
+          body: [
+            { id: 'stmt-break', kind: 'BreakStmt', props: {}, children: {} },
+          ],
         },
       },
     ],
