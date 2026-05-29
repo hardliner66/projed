@@ -897,7 +897,13 @@ export function exportUserPresets(names: string[]): Record<string, ProjectionMap
   const selected = names.length === 0 ? Object.keys(all) : names
   const result: Record<string, ProjectionMap> = {}
   for (const name of selected) {
-    if (all[name]) result[name] = cloneProjectionMap(all[name])
+    if (!Object.prototype.hasOwnProperty.call(all, name)) continue
+    const value = all[name]
+    if (!value || typeof value !== 'object') {
+      result[name] = {}
+      continue
+    }
+    result[name] = cloneProjectionMap(value)
   }
   return result
 }

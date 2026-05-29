@@ -270,7 +270,13 @@ const ProjectionEditor: Component<Props> = (props) => {
       setExportError('Select at least one custom projection to export.')
       return
     }
-    const exportMap = exportUserPresets(selected)
+    const available = getUserPresetNames()
+    const normalized = selected.filter((name) => available.includes(name))
+    const exportMap = exportUserPresets(normalized)
+    if (Object.keys(exportMap).length === 0) {
+      setExportError('No exportable custom projections were found. Re-open the dialog and try again.')
+      return
+    }
     const payload = JSON.stringify({ projections: exportMap }, null, 2)
     await saveJsonFile(payload, 'projed-projections.json')
     setExportOpen(false)
