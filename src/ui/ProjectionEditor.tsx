@@ -43,31 +43,11 @@ function triggerDownload(content: string, filename: string) {
   a.href = url
   a.download = filename
   a.click()
-  URL.revokeObjectURL(url)
+  // Give the browser time to start reading the blob before revoking it.
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-async function saveJsonFile(content: string, filename: string) {
-  const picker = (window as Window & {
-    showSaveFilePicker?: (options?: unknown) => Promise<{ createWritable: () => Promise<{ write: (data: string) => Promise<void>; close: () => Promise<void> }> }>
-  }).showSaveFilePicker
-
-  if (!picker) {
-    triggerDownload(content, filename)
-    return
-  }
-
-  try {
-    const handle = await picker({
-      suggestedName: filename,
-      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
-    })
-    const writable = await handle.createWritable()
-    await writable.write(content)
-    await writable.close()
-  } catch {
-    // User cancelled the picker or browser rejected the write.
-  }
-}
+let canUseNativeSavePicker = true
 
 const ProjectionEditor: Component<Props> = (props) => {
   const [open, setOpen] = createSignal(false)
@@ -277,9 +257,14 @@ const ProjectionEditor: Component<Props> = (props) => {
       setExportError('No exportable custom projections were found. Re-open the dialog and try again.')
       return
     }
-    const payload = JSON.stringify({ projections: exportMap }, null, 2)
-    await saveJsonFile(payload, 'projed-projections.json')
-    setExportOpen(false)
+    const payload = JSON.stringify({ projections: exportMap })
+    try {
+      triggerDownload(payload, 'projed-projections.json')
+      setExportError('')
+      setExportOpen(false)
+    } catch (e) {
+      setExportError(`Could not save file: ${String(e)}`)
+    }
   }
 
   function onImport() {
