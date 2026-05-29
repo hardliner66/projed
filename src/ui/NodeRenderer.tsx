@@ -1,6 +1,6 @@
 import { Component, For, Show, Switch, Match } from 'solid-js'
 import type { IrNode, IrModel, EditCommand } from '../ir/types'
-import type { CellDef } from '../projection/types'
+import type { CellDef, ProjectionMap } from '../projection/types'
 import { getProjections } from '../projection/registry'
 import { selectedNodeId, setSelectedNodeId, setEditingNodeProp } from '../editor/state'
 import LabelCell from './cells/LabelCell'
@@ -10,11 +10,12 @@ interface Props {
   nodeId: string
   model: IrModel
   onCommand: (cmd: EditCommand) => void
+  projectionMap?: ProjectionMap
 }
 
 const NodeRenderer: Component<Props> = (props) => {
   const node = () => props.model.nodes[props.nodeId]
-  const cells = () => getProjections()[node()?.kind]
+  const cells = () => (props.projectionMap ?? getProjections())[node()?.kind]
   const isSelected = () => selectedNodeId() === props.nodeId
 
   function handleClick(e: MouseEvent) {
@@ -30,7 +31,13 @@ const NodeRenderer: Component<Props> = (props) => {
         onClick={handleClick}
       >
         <Show when={cells()} fallback={<FallbackRenderer node={node()} />}>
-          <CellListRenderer cells={cells()!} node={node()} model={props.model} onCommand={props.onCommand} />
+          <CellListRenderer
+            cells={cells()!}
+            node={node()}
+            model={props.model}
+            onCommand={props.onCommand}
+            projectionMap={props.projectionMap}
+          />
         </Show>
       </div>
     </Show>
@@ -42,11 +49,20 @@ interface CellListProps {
   node: IrNode
   model: IrModel
   onCommand: (cmd: EditCommand) => void
+  projectionMap?: ProjectionMap
 }
 
 export const CellListRenderer: Component<CellListProps> = (props) => (
   <For each={props.cells}>
-    {(cell) => <CellRenderer cell={cell} node={props.node} model={props.model} onCommand={props.onCommand} />}
+    {(cell) => (
+      <CellRenderer
+        cell={cell}
+        node={props.node}
+        model={props.model}
+        onCommand={props.onCommand}
+        projectionMap={props.projectionMap}
+      />
+    )}
   </For>
 )
 
@@ -55,6 +71,7 @@ interface CellProps {
   node: IrNode
   model: IrModel
   onCommand: (cmd: EditCommand) => void
+  projectionMap?: ProjectionMap
 }
 
 const CellRenderer: Component<CellProps> = (props) => {
@@ -82,7 +99,12 @@ const CellRenderer: Component<CellProps> = (props) => {
           const childId = () => props.node.children[c().name]?.[0]
           return (
             <Show when={childId()}>
-              <NodeRenderer nodeId={childId()!} model={props.model} onCommand={props.onCommand} />
+              <NodeRenderer
+                nodeId={childId()!}
+                model={props.model}
+                onCommand={props.onCommand}
+                projectionMap={props.projectionMap}
+              />
             </Show>
           )
         }}
@@ -96,13 +118,19 @@ const CellRenderer: Component<CellProps> = (props) => {
               <For each={ids()}>
                 {(childId, i) => (
                   <>
-                    <NodeRenderer nodeId={childId} model={props.model} onCommand={props.onCommand} />
+                    <NodeRenderer
+                      nodeId={childId}
+                      model={props.model}
+                      onCommand={props.onCommand}
+                      projectionMap={props.projectionMap}
+                    />
                     <Show when={c().separator && i() < ids().length - 1}>
                       <CellRenderer
                         cell={c().separator!}
                         node={props.node}
                         model={props.model}
                         onCommand={props.onCommand}
+                        projectionMap={props.projectionMap}
                       />
                     </Show>
                   </>
@@ -119,7 +147,13 @@ const CellRenderer: Component<CellProps> = (props) => {
       <Match when={cell().type === 'block' && cell() as Extract<CellDef, { type: 'block' }>}>
         {(c) => (
           <div class={`cell-block dir-${c().direction ?? 'row'}`}>
-            <CellListRenderer cells={c().children} node={props.node} model={props.model} onCommand={props.onCommand} />
+            <CellListRenderer
+              cells={c().children}
+              node={props.node}
+              model={props.model}
+              onCommand={props.onCommand}
+              projectionMap={props.projectionMap}
+            />
           </div>
         )}
       </Match>
@@ -127,7 +161,13 @@ const CellRenderer: Component<CellProps> = (props) => {
       <Match when={cell().type === 'indent' && cell() as Extract<CellDef, { type: 'indent' }>}>
         {(c) => (
           <div class="cell-indent">
-            <CellListRenderer cells={c().children} node={props.node} model={props.model} onCommand={props.onCommand} />
+            <CellListRenderer
+              cells={c().children}
+              node={props.node}
+              model={props.model}
+              onCommand={props.onCommand}
+              projectionMap={props.projectionMap}
+            />
           </div>
         )}
       </Match>

@@ -389,7 +389,7 @@ const App: Component = () => {
     <div class="app">
       <header class="toolbar">
         <span class="app-title">Projed</span>
-        <ProjectionEditor />
+        <ProjectionEditor model={model} />
       </header>
       <div class="workspace">
         <main class="editor-surface" onClick={() => selectNode(null)}>

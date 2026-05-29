@@ -754,28 +754,129 @@ const BUILTIN_PRESETS: Record<string, ProjectionMap> = {
   'C / C++': cProjections,
 }
 
-export const PRESET_NAMES = Object.keys(BUILTIN_PRESETS)
+const STORAGE_KEY = 'projed.user-projections.v1'
+
+function cloneProjectionMap(map: ProjectionMap): ProjectionMap {
+  return JSON.parse(JSON.stringify(map)) as ProjectionMap
+}
+
+function clonePresetRecord(record: Record<string, ProjectionMap>): Record<string, ProjectionMap> {
+  return Object.fromEntries(Object.entries(record).map(([name, map]) => [name, cloneProjectionMap(map)]))
+}
+
+function readStoredUserPresets(): Record<string, ProjectionMap> {
+  try {
+    const raw = globalThis.localStorage?.getItem(STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return {}
+    return parsed as Record<string, ProjectionMap>
+  } catch {
+    return {}
+  }
+}
+
+function persistUserPresets(value: Record<string, ProjectionMap>) {
+  try {
+    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(value))
+  } catch {
+    // Ignore storage failures (private mode / quota exceeded)
+  }
+}
 
 const [activePresetName, setActivePresetName] = createSignal<string>('Rust')
-const [presetMaps, setPresetMaps] = createSignal<Record<string, ProjectionMap>>({ ...BUILTIN_PRESETS })
+const [userPresets, setUserPresets] = createSignal<Record<string, ProjectionMap>>(readStoredUserPresets())
 
 export { activePresetName }
 
+export function isBuiltinPreset(name: string): boolean {
+  return name in BUILTIN_PRESETS
+}
+
+export function getPresetNames(): string[] {
+  return [...Object.keys(BUILTIN_PRESETS), ...Object.keys(userPresets())]
+}
+
+export function getUserPresetNames(): string[] {
+  return Object.keys(userPresets())
+}
+
+export function getPresetProjection(name: string): ProjectionMap | undefined {
+  if (isBuiltinPreset(name)) return BUILTIN_PRESETS[name]
+  const custom = userPresets()[name]
+  return custom ? cloneProjectionMap(custom) : undefined
+}
+
 export function getProjections(): ProjectionMap {
-  return presetMaps()[activePresetName()] ?? rustProjections
+  const active = activePresetName()
+  const builtIn = BUILTIN_PRESETS[active]
+  if (builtIn) return builtIn
+  const custom = userPresets()[active]
+  return custom ?? rustProjections
 }
 
-export function switchPreset(name: string) {
-  if (name in BUILTIN_PRESETS) setActivePresetName(name)
+export function switchPreset(name: string): boolean {
+  if (isBuiltinPreset(name) || userPresets()[name]) {
+    setActivePresetName(name)
+    return true
+  }
+  return false
 }
 
-export function setProjectionMap(map: ProjectionMap) {
-  setPresetMaps(prev => ({ ...prev, [activePresetName()]: map }))
+export function createUserPreset(name: string, map?: ProjectionMap): { ok: true } | { ok: false; error: string } {
+  if (!name.trim()) return { ok: false, error: 'Name is required.' }
+  if (isBuiltinPreset(name)) return { ok: false, error: 'Built-in names are reserved.' }
+  if (userPresets()[name]) return { ok: false, error: 'A projection with this name already exists.' }
+  const nextMap = cloneProjectionMap(map ?? {})
+  setUserPresets(prev => {
+    const next = { ...prev, [name]: nextMap }
+    persistUserPresets(next)
+    return next
+  })
+  setActivePresetName(name)
+  return { ok: true }
+}
+
+export function deleteUserPreset(name: string): { ok: true } | { ok: false; error: string } {
+  if (isBuiltinPreset(name)) return { ok: false, error: 'Built-in projections cannot be deleted.' }
+  if (!userPresets()[name]) return { ok: false, error: 'Projection not found.' }
+  setUserPresets(prev => {
+    const next = { ...prev }
+    delete next[name]
+    persistUserPresets(next)
+    return next
+  })
+  if (activePresetName() === name) setActivePresetName('Rust')
+  return { ok: true }
+}
+
+export function upsertUserPreset(name: string, map: ProjectionMap): { ok: true } | { ok: false; error: string } {
+  if (!name.trim()) return { ok: false, error: 'Name is required.' }
+  if (isBuiltinPreset(name)) return { ok: false, error: 'Built-in names are reserved.' }
+  const nextMap = cloneProjectionMap(map)
+  setUserPresets(prev => {
+    const next = { ...prev, [name]: nextMap }
+    persistUserPresets(next)
+    return next
+  })
+  return { ok: true }
+}
+
+export function setProjectionMap(map: ProjectionMap): { ok: true } | { ok: false; error: string } {
+  const name = activePresetName()
+  if (isBuiltinPreset(name)) return { ok: false, error: 'Built-in projections are write-protected.' }
+  return upsertUserPreset(name, map)
 }
 
 export function updateProjection(kind: string, cells: import('./types').CellDef[]) {
   const name = activePresetName()
-  setPresetMaps(prev => ({ ...prev, [name]: { ...prev[name], [kind]: cells } }))
+  if (isBuiltinPreset(name)) return
+  setUserPresets(prev => {
+    const current = prev[name] ?? {}
+    const next = { ...prev, [name]: { ...current, [kind]: cells } }
+    persistUserPresets(next)
+    return next
+  })
 }
 
 export function getProjectionJson(): string {
@@ -784,16 +885,43 @@ export function getProjectionJson(): string {
 
 export function loadProjectionJson(json: string): { ok: true } | { ok: false; error: string } {
   try {
-    const parsed = JSON.parse(json)
-    setProjectionMap(parsed)
-    return { ok: true }
+    const parsed = JSON.parse(json) as ProjectionMap
+    return setProjectionMap(parsed)
   } catch (e) {
     return { ok: false, error: String(e) }
   }
 }
 
+export function exportUserPresets(names: string[]): Record<string, ProjectionMap> {
+  const all = userPresets()
+  const selected = names.length === 0 ? Object.keys(all) : names
+  const result: Record<string, ProjectionMap> = {}
+  for (const name of selected) {
+    if (all[name]) result[name] = cloneProjectionMap(all[name])
+  }
+  return result
+}
+
+export function getUserPresetsSnapshot(): Record<string, ProjectionMap> {
+  return clonePresetRecord(userPresets())
+}
+
+export function restoreUserPresetsSnapshot(snapshot: Record<string, ProjectionMap>, nextActive: string) {
+  const cloned = clonePresetRecord(snapshot)
+  setUserPresets(() => {
+    persistUserPresets(cloned)
+    return cloned
+  })
+  if (isBuiltinPreset(nextActive) || cloned[nextActive]) setActivePresetName(nextActive)
+  else setActivePresetName('Rust')
+}
+
 export function resetActivePreset() {
   const name = activePresetName()
-  const builtin = BUILTIN_PRESETS[name]
-  if (builtin) setPresetMaps(prev => ({ ...prev, [name]: builtin }))
+  if (isBuiltinPreset(name)) return
+  setUserPresets(prev => {
+    const next = { ...prev, [name]: {} }
+    persistUserPresets(next)
+    return next
+  })
 }
