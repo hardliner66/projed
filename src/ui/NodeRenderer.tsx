@@ -2,7 +2,7 @@ import { Component, For, Show, Switch, Match } from 'solid-js'
 import type { IrNode, IrModel, EditCommand } from '../ir/types'
 import type { CellDef } from '../projection/types'
 import { getProjections } from '../projection/registry'
-import { selectedNodeId, setSelectedNodeId } from '../editor/state'
+import { selectedNodeId, setSelectedNodeId, setEditingNodeProp } from '../editor/state'
 import LabelCell from './cells/LabelCell'
 import PropCell from './cells/PropCell'
 
@@ -19,6 +19,7 @@ const NodeRenderer: Component<Props> = (props) => {
 
   function handleClick(e: MouseEvent) {
     e.stopPropagation()
+    setEditingNodeProp(null)
     setSelectedNodeId(props.nodeId)
   }
 

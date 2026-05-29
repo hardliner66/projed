@@ -1,4 +1,4 @@
-import { Component, createEffect, createSignal } from 'solid-js'
+import { Component } from 'solid-js'
 import type { IrNode, EditCommand } from '../../ir/types'
 import { setSelectedNodeId, editingNodeProp, setEditingNodeProp } from '../../editor/state'
 
@@ -11,17 +11,9 @@ interface Props {
 
 const PropCell: Component<Props> = (props) => {
   const value = () => String(props.node.props[props.propName] ?? '')
-  const [editing, setEditing] = createSignal(false)
-
-  createEffect(() => {
-    const ep = editingNodeProp()
-    if (ep?.nodeId === props.node.id && ep?.propName === props.propName) {
-      setEditing(true)
-    }
-  })
+  const isEditing = () => editingNodeProp()?.nodeId === props.node.id && editingNodeProp()?.propName === props.propName
 
   function commit(val: string) {
-    setEditing(false)
     setEditingNodeProp(null)
     if (val !== String(props.node.props[props.propName] ?? '')) {
       props.onCommand({ type: 'SET_PROP', nodeId: props.node.id, prop: props.propName, value: val })
@@ -29,16 +21,15 @@ const PropCell: Component<Props> = (props) => {
   }
 
   function cancelEdit() {
-    setEditing(false)
     setEditingNodeProp(null)
   }
 
   return (
     <span
       class="cell-prop"
-      onClick={(e) => { e.stopPropagation(); setSelectedNodeId(props.node.id); setEditing(true) }}
+      onClick={(e) => { e.stopPropagation(); setSelectedNodeId(props.node.id); setEditingNodeProp({ nodeId: props.node.id, propName: props.propName }) }}
     >
-      {editing() ? (
+      {isEditing() ? (
         props.multiline ? (
           <textarea
             value={value()}

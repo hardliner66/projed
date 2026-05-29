@@ -236,12 +236,17 @@ const App: Component = () => {
 
   // ── Navigation ──────────────────────────────────────────────────────────────
 
+  function selectNode(nodeId: string | null) {
+    setEditingNodeProp(null)
+    setSelectedNodeId(nodeId)
+  }
+
   function selectNext() {
     const order = buildNavOrder(model)
     const cur = selectedNodeId()
-    if (!cur) { setSelectedNodeId(order[1] ?? null); return }
+    if (!cur) { selectNode(order[1] ?? null); return }
     const idx = order.indexOf(cur)
-    if (idx >= 0 && idx + 1 < order.length) setSelectedNodeId(order[idx + 1])
+    if (idx >= 0 && idx + 1 < order.length) selectNode(order[idx + 1])
   }
 
   function selectPrev() {
@@ -249,14 +254,14 @@ const App: Component = () => {
     const cur = selectedNodeId()
     if (!cur) return
     const idx = order.indexOf(cur)
-    if (idx > 1) setSelectedNodeId(order[idx - 1])
+    if (idx > 1) selectNode(order[idx - 1])
   }
 
   function selectParent() {
     const nodeId = selectedNodeId()
     if (!nodeId || nodeId === model.rootId) return
     const ctx = getParentContext(model, nodeId)
-    if (ctx) setSelectedNodeId(ctx.parentId)
+    if (ctx) selectNode(ctx.parentId)
   }
 
   function selectFirstChild() {
@@ -265,7 +270,7 @@ const App: Component = () => {
     const node = model.nodes[nodeId]
     if (!node) return
     for (const children of Object.values(node.children)) {
-      if (children.length > 0) { setSelectedNodeId(children[0]); return }
+      if (children.length > 0) { selectNode(children[0]); return }
     }
   }
 
@@ -309,7 +314,7 @@ const App: Component = () => {
     applyCommand({ type: 'INSERT_CHILD', parentId: ctx.parentId, role: ctx.role, child: node, index: ctx.index })
     setInsertCtx(null)
     setInsertInitialQuery('')
-    setSelectedNodeId(node.id)
+    selectNode(node.id)
     const firstProp = Object.keys(node.props)[0]
     if (firstProp) setEditingNodeProp({ nodeId: node.id, propName: firstProp })
   }
@@ -326,7 +331,7 @@ const App: Component = () => {
     else if (idx > 0) nextSelected = siblings[idx - 1]
     else nextSelected = ctx.parentId
     applyCommand({ type: 'DELETE_NODE', nodeId, parentId: ctx.parentId, role: ctx.role })
-    setSelectedNodeId(nextSelected)
+    selectNode(nextSelected)
   }
 
   function startEditingFirstProp() {
@@ -360,7 +365,7 @@ const App: Component = () => {
       case 'Backspace':
       case 'Delete': e.preventDefault(); deleteSelected(); break
       // ── Misc ──
-      case 'Escape': setSelectedNodeId(null); break
+      case 'Escape': selectNode(null); break
       default:
         if (e.key.length === 1) openInsert(e.key)
     }
@@ -387,7 +392,7 @@ const App: Component = () => {
         <ProjectionEditor />
       </header>
       <div class="workspace">
-        <main class="editor-surface" onClick={() => setSelectedNodeId(null)}>
+        <main class="editor-surface" onClick={() => selectNode(null)}>
           <NodeRenderer nodeId={model.rootId} model={model} onCommand={applyCommand} />
         </main>
         <Sidebar model={model} onCommand={applyCommand} />

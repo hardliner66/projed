@@ -1,6 +1,6 @@
 import { Component, For, Show, createMemo } from 'solid-js'
 import type { IrModel, EditCommand } from '../ir/types'
-import { selectedNodeId, setSelectedNodeId } from '../editor/state'
+import { selectedNodeId, setSelectedNodeId, setEditingNodeProp } from '../editor/state'
 
 interface Props {
   model: IrModel
@@ -81,7 +81,7 @@ const Sidebar: Component<Props> = (props) => {
                       ? `${resolved.kind}${resolved.props.name ? ` ${String(resolved.props.name)}` : ''}`
                       : target
                     return (
-                      <div class="info-row clickable" onClick={() => setSelectedNodeId(target)}>
+                      <div class="info-row clickable" onClick={() => { setEditingNodeProp(null); setSelectedNodeId(target) }}>
                         <span class="info-label">{role}</span>
                         <span class="info-value">{value}</span>
                       </div>
