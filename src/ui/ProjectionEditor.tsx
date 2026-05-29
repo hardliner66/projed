@@ -46,6 +46,29 @@ function triggerDownload(content: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+async function saveJsonFile(content: string, filename: string) {
+  const picker = (window as Window & {
+    showSaveFilePicker?: (options?: unknown) => Promise<{ createWritable: () => Promise<{ write: (data: string) => Promise<void>; close: () => Promise<void> }> }>
+  }).showSaveFilePicker
+
+  if (!picker) {
+    triggerDownload(content, filename)
+    return
+  }
+
+  try {
+    const handle = await picker({
+      suggestedName: filename,
+      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+    })
+    const writable = await handle.createWritable()
+    await writable.write(content)
+    await writable.close()
+  } catch {
+    // User cancelled the picker or browser rejected the write.
+  }
+}
+
 const ProjectionEditor: Component<Props> = (props) => {
   const [open, setOpen] = createSignal(false)
   const [addOpen, setAddOpen] = createSignal(false)
@@ -53,6 +76,9 @@ const ProjectionEditor: Component<Props> = (props) => {
   const [addName, setAddName] = createSignal('')
   const [addSourceName, setAddSourceName] = createSignal('Rust')
   const [addError, setAddError] = createSignal('')
+  const [exportOpen, setExportOpen] = createSignal(false)
+  const [exportSelected, setExportSelected] = createSignal<string[]>([])
+  const [exportError, setExportError] = createSignal('')
   const [text, setText] = createSignal('')
   const [baselineText, setBaselineText] = createSignal('')
   const [error, setError] = createSignal('')
@@ -225,21 +251,29 @@ const ProjectionEditor: Component<Props> = (props) => {
       window.alert('There are no custom projections to export.')
       return
     }
-    const answer = window.prompt(
-      `Export which custom projections?\nType "all" or a comma-separated list.\nAvailable: ${names.join(', ')}`,
-      'all',
-    )
-    if (!answer) return
-    const requested = answer.trim().toLowerCase() === 'all'
-      ? names
-      : answer.split(',').map((n) => n.trim()).filter(Boolean)
-    const exportMap = exportUserPresets(requested)
-    const selected = Object.keys(exportMap)
-    if (selected.length === 0) {
-      window.alert('No matching custom projections selected.')
+    setExportSelected(names)
+    setExportError('')
+    setExportOpen(true)
+  }
+
+  function onToggleExportName(name: string, checked: boolean) {
+    if (checked) {
+      setExportSelected(prev => (prev.includes(name) ? prev : [...prev, name]))
       return
     }
-    triggerDownload(JSON.stringify({ projections: exportMap }, null, 2), 'projed-projections.json')
+    setExportSelected(prev => prev.filter(n => n !== name))
+  }
+
+  async function onConfirmExport() {
+    const selected = exportSelected()
+    if (selected.length === 0) {
+      setExportError('Select at least one custom projection to export.')
+      return
+    }
+    const exportMap = exportUserPresets(selected)
+    const payload = JSON.stringify({ projections: exportMap }, null, 2)
+    await saveJsonFile(payload, 'projed-projections.json')
+    setExportOpen(false)
   }
 
   function onImport() {
@@ -365,6 +399,43 @@ const ProjectionEditor: Component<Props> = (props) => {
         </div>
       </Show>
 
+      <Show when={exportOpen()}>
+        <div class="modal-backdrop" onClick={() => setExportOpen(false)}>
+          <div class="modal" onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span>Export Projections</span>
+              <button onClick={() => setExportOpen(false)}>✕</button>
+            </div>
+            <div class="projection-add-body">
+              <div class="projection-add-field">
+                <span>Select custom projections to export</span>
+                <div class="projection-export-list">
+                  <For each={getUserPresetNames()}>
+                    {(name) => (
+                      <label class="projection-export-item">
+                        <input
+                          type="checkbox"
+                          checked={exportSelected().includes(name)}
+                          onChange={(e) => onToggleExportName(name, e.currentTarget.checked)}
+                        />
+                        <span>{name}</span>
+                      </label>
+                    )}
+                  </For>
+                </div>
+              </div>
+              <Show when={exportError()}>
+                <div class="modal-error">{exportError()}</div>
+              </Show>
+            </div>
+            <div class="modal-footer">
+              <button onClick={onConfirmExport}>Export</button>
+              <button onClick={() => setExportOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
       <Show when={open()}>
         <div class="modal-backdrop projection-editor-backdrop" onClick={onExit}>
           <div class="projection-editor-fullscreen" onClick={(e) => e.stopPropagation()}>
@@ -397,7 +468,7 @@ const ProjectionEditor: Component<Props> = (props) => {
                   <NodeRenderer
                     nodeId={props.model.rootId}
                     model={props.model}
-                    onCommand={() => {}}
+                    onCommand={() => { }}
                     projectionMap={previewMap() ?? getPresetProjection(activePresetName()) ?? {}}
                   />
                 </main>
