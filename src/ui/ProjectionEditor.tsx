@@ -48,6 +48,11 @@ function triggerDownload(content: string, filename: string) {
 
 const ProjectionEditor: Component<Props> = (props) => {
   const [open, setOpen] = createSignal(false)
+  const [addOpen, setAddOpen] = createSignal(false)
+  const [addMode, setAddMode] = createSignal<'empty' | 'clone'>('clone')
+  const [addName, setAddName] = createSignal('')
+  const [addSourceName, setAddSourceName] = createSignal('Rust')
+  const [addError, setAddError] = createSignal('')
   const [text, setText] = createSignal('')
   const [baselineText, setBaselineText] = createSignal('')
   const [error, setError] = createSignal('')
@@ -172,23 +177,25 @@ const ProjectionEditor: Component<Props> = (props) => {
   }
 
   function onAdd() {
-    const modeRaw = window.prompt('Type "empty" to create an empty projection, or "clone" to copy an existing one.', 'clone')
-    if (!modeRaw) return
-    const mode = modeRaw.trim().toLowerCase()
-    if (mode !== 'empty' && mode !== 'clone') {
-      window.alert('Please type exactly "empty" or "clone".')
+    setAddMode('clone')
+    setAddName('')
+    setAddSourceName(activePresetName())
+    setAddError('')
+    setAddOpen(true)
+  }
+
+  function onCreateAdd() {
+    const name = addName().trim()
+    if (!name) {
+      setAddError('Name is required.')
       return
     }
-    const name = window.prompt('Enter a name for the new projection:')?.trim()
-    if (!name) return
 
     let source: ProjectionMap = {}
-    if (mode === 'clone') {
-      const sourceName = window.prompt(`Clone from which projection?\nAvailable: ${getPresetNames().join(', ')}`, activePresetName())?.trim()
-      if (!sourceName) return
-      const found = getPresetProjection(sourceName)
+    if (addMode() === 'clone') {
+      const found = getPresetProjection(addSourceName())
       if (!found) {
-        window.alert('Projection not found.')
+        setAddError('Clone source projection not found.')
         return
       }
       source = found
@@ -197,9 +204,10 @@ const ProjectionEditor: Component<Props> = (props) => {
     pushManagerHistory()
     const result = createUserPreset(name, source)
     if (!result.ok) {
-      window.alert(result.error)
+      setAddError(result.error)
       return
     }
+    setAddOpen(false)
   }
 
   function onDelete() {
@@ -307,6 +315,55 @@ const ProjectionEditor: Component<Props> = (props) => {
         style={{ display: 'none' }}
         onChange={onImportFileChange}
       />
+
+      <Show when={addOpen()}>
+        <div class="modal-backdrop" onClick={() => setAddOpen(false)}>
+          <div class="modal" onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span>Create Projection</span>
+              <button onClick={() => setAddOpen(false)}>✕</button>
+            </div>
+            <div class="projection-add-body">
+              <label class="projection-add-field">
+                <span>Mode</span>
+                <select class="toolbar-select" value={addMode()} onChange={(e) => setAddMode(e.currentTarget.value as 'empty' | 'clone')}>
+                  <option value="clone">Clone existing</option>
+                  <option value="empty">Empty</option>
+                </select>
+              </label>
+
+              <label class="projection-add-field">
+                <span>Name</span>
+                <input
+                  class="prop-input"
+                  value={addName()}
+                  onInput={(e) => setAddName(e.currentTarget.value)}
+                  placeholder="My Projection"
+                />
+              </label>
+
+              <Show when={addMode() === 'clone'}>
+                <label class="projection-add-field">
+                  <span>Clone source</span>
+                  <select class="toolbar-select" value={addSourceName()} onChange={(e) => setAddSourceName(e.currentTarget.value)}>
+                    <For each={getPresetNames()}>
+                      {(name) => <option value={name}>{name}</option>}
+                    </For>
+                  </select>
+                </label>
+              </Show>
+
+              <Show when={addError()}>
+                <div class="modal-error">{addError()}</div>
+              </Show>
+            </div>
+            <div class="modal-footer">
+              <button onClick={onCreateAdd}>Create</button>
+              <button onClick={() => setAddOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      </Show>
 
       <Show when={open()}>
         <div class="modal-backdrop projection-editor-backdrop" onClick={onExit}>

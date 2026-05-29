@@ -433,6 +433,21 @@ body {
   font-weight: 600;
 }
 
+.projection-add-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.projection-add-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
 .projection-editor-backdrop {
   background: rgba(0, 0, 0, 0.82);
 }
