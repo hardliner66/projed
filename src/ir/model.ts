@@ -1,5 +1,5 @@
 import { createStore, produce } from 'solid-js/store'
-import type { IrModel, IrNode, NodeId, EditCommand } from './types'
+import type { Diagnostic, IrModel, IrNode, NodeId, EditCommand } from './types'
 
 interface Scope {
   parent: Scope | null
@@ -72,6 +72,19 @@ function inferBinaryType(op: string, leftType: string, rightType: string): strin
   return leftType === rightType ? leftType : 'Any'
 }
 
+function isAssignable(expected: string, actual: string): boolean {
+  if (expected === 'Any' || actual === 'Any') return true
+  if (expected === actual) return true
+  if (expected.startsWith('Iterator<') && actual.startsWith('Iterator<')) return true
+  return false
+}
+
+function pushDiagnostic(node: IrNode, severity: Diagnostic['severity'], message: string) {
+  node.analysis ??= {}
+  node.analysis.diagnostics ??= []
+  node.analysis.diagnostics.push({ severity, message })
+}
+
 function resolveModel(model: IrModel) {
   for (const node of Object.values(model.nodes)) {
     node.refs = {}
@@ -139,6 +152,13 @@ function resolveModel(model: IrModel) {
           declaredType: declaredType === 'Any' && inferred !== 'Any' ? inferred : declaredType,
           inferredType: inferred || declaredType,
         }
+        if (node.kind === 'LetDecl' || node.kind === 'LetStmt' || node.kind === 'Parameter' || node.kind === 'FieldDecl') {
+          const effectiveDeclared = node.analysis.declaredType ?? declaredType
+          const effectiveInferred = node.analysis.inferredType ?? inferred
+          if (effectiveDeclared && effectiveInferred && !isAssignable(effectiveDeclared, effectiveInferred)) {
+            pushDiagnostic(node, 'error', `${node.kind} type ${effectiveDeclared} does not match ${effectiveInferred}`)
+          }
+        }
         return node.analysis.inferredType ?? 'Any'
       }
       case 'ReturnStmt': {
@@ -155,20 +175,27 @@ function resolveModel(model: IrModel) {
       }
       case 'IfStmt': {
         const conditionId = firstChildId(node, 'condition')
-        if (conditionId) visit(conditionId, scope)
+        const conditionType = conditionId ? visit(conditionId, scope) : 'Any'
+        const analysis = { inferredType: 'Unit' as const }
         const thenScope = createScope(scope)
         for (const childId of node.children.thenBody ?? []) visit(childId, thenScope)
         const elseScope = createScope(scope)
         for (const childId of node.children.elseBody ?? []) visit(childId, elseScope)
-        node.analysis = { inferredType: 'Unit' }
+        node.analysis = analysis
+        if (conditionType !== 'Bool' && conditionType !== 'Any') {
+          pushDiagnostic(node, 'warning', `if condition is ${conditionType}, expected Bool`)
+        }
         return 'Unit'
       }
       case 'WhileStmt': {
         const conditionId = firstChildId(node, 'condition')
-        if (conditionId) visit(conditionId, scope)
+        const conditionType = conditionId ? visit(conditionId, scope) : 'Any'
+        node.analysis = { inferredType: 'Unit' }
         const loopScope = createScope(scope)
         for (const childId of node.children.body ?? []) visit(childId, loopScope)
-        node.analysis = { inferredType: 'Unit' }
+        if (conditionType !== 'Bool' && conditionType !== 'Any') {
+          pushDiagnostic(node, 'warning', `while condition is ${conditionType}, expected Bool`)
+        }
         return 'Unit'
       }
       case 'ForStmt': {
@@ -190,10 +217,12 @@ function resolveModel(model: IrModel) {
         const targetId = scopeLookup(scope, name)
         if (targetId) {
           node.refs.declaration = targetId
+        } else if (name) {
+          pushDiagnostic(node, 'error', `unresolved identifier ${name}`)
         }
         const target = targetId ? model.nodes[targetId] : undefined
         const inferred = getNodeType(target)
-        node.analysis = { inferredType: inferred }
+        node.analysis = { inferredType: inferred, diagnostics: node.analysis?.diagnostics }
         return inferred
       }
       case 'LiteralExpr': {
@@ -208,6 +237,46 @@ function resolveModel(model: IrModel) {
         const rightType = rightId ? visit(rightId, scope) : 'Any'
         const inferred = inferBinaryType(stringProp(node, 'op') || '+', leftType, rightType)
         node.analysis = { inferredType: inferred }
+        if (inferred === 'Any' && leftType !== 'Any' && rightType !== 'Any') {
+          pushDiagnostic(node, 'warning', `operator ${stringProp(node, 'op') || '+'} is not well-typed for ${leftType} and ${rightType}`)
+        }
+        return inferred
+      }
+      case 'UnaryExpr': {
+        const exprId = firstChildId(node, 'expr')
+        const exprType = exprId ? visit(exprId, scope) : 'Any'
+        const op = stringProp(node, 'op') || '-'
+        const inferred = op === '!' ? 'Bool' : exprType === 'Number' && op === '-' ? 'Number' : exprType
+        node.analysis = { inferredType: inferred }
+        if (op === '!' && exprType !== 'Bool' && exprType !== 'Any') {
+          pushDiagnostic(node, 'warning', `unary ! expects Bool, got ${exprType}`)
+        }
+        if (op === '-' && exprType !== 'Number' && exprType !== 'Any') {
+          pushDiagnostic(node, 'warning', `unary - expects Number, got ${exprType}`)
+        }
+        return inferred
+      }
+      case 'MemberExpr': {
+        const objectId = firstChildId(node, 'object')
+        const objectType = objectId ? visit(objectId, scope) : 'Any'
+        const member = stringProp(node, 'member')
+        const inferred = objectType === 'Any' ? 'Any' : member ? 'Any' : objectType
+        node.analysis = { inferredType: inferred }
+        if (objectType === 'Any') {
+          pushDiagnostic(node, 'warning', 'member access target has unknown type')
+        }
+        return inferred
+      }
+      case 'ArrayLiteralExpr': {
+        const elementTypes = (node.children.elements ?? []).map((elementId) => visit(elementId, scope))
+        const nonAny = elementTypes.filter((type) => type !== 'Any')
+        const firstType = nonAny[0] ?? 'Any'
+        const homogeneous = nonAny.every((type) => type === firstType)
+        const inferred = firstType === 'Any' ? 'Array<Any>' : homogeneous ? `Array<${firstType}>` : 'Array<Any>'
+        node.analysis = { inferredType: inferred }
+        if (!homogeneous && nonAny.length > 1) {
+          pushDiagnostic(node, 'warning', `array literal mixes element types: ${nonAny.join(', ')}`)
+        }
         return inferred
       }
       case 'CallExpr': {
@@ -215,6 +284,9 @@ function resolveModel(model: IrModel) {
         const calleeType = calleeId ? visit(calleeId, scope) : 'Any'
         for (const argId of node.children.args ?? []) visit(argId, scope)
         node.analysis = { inferredType: calleeType }
+        if (calleeType === 'Any') {
+          pushDiagnostic(node, 'warning', 'call target has unknown type')
+        }
         return calleeType
       }
       case 'AssignExpr': {
@@ -223,6 +295,9 @@ function resolveModel(model: IrModel) {
         const targetType = targetId ? visit(targetId, scope) : 'Any'
         const valueType = valueId ? visit(valueId, scope) : 'Any'
         node.analysis = { inferredType: targetType !== 'Any' ? targetType : valueType }
+        if (!isAssignable(targetType, valueType)) {
+          pushDiagnostic(node, 'error', `cannot assign ${valueType} to ${targetType}`)
+        }
         return node.analysis.inferredType || 'Any'
       }
       default: {

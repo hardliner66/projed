@@ -234,6 +234,32 @@ const defaultProjections: ProjectionMap = {
       ]
     },
   ],
+  UnaryExpr: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'prop', name: 'op' },
+        { type: 'child', name: 'expr' },
+      ]
+    },
+  ],
+  MemberExpr: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'child', name: 'object' },
+        { type: 'label', text: '.', style: 'punct' },
+        { type: 'prop', name: 'member' },
+      ]
+    },
+  ],
+  ArrayLiteralExpr: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'label', text: '[', style: 'punct' },
+        { type: 'childList', name: 'elements', inline: true, separator: { type: 'label', text: ', ', style: 'punct' } },
+        { type: 'label', text: ']', style: 'punct' },
+      ]
+    },
+  ],
 }
 
 const [projections, setProjections] = createSignal<ProjectionMap>(defaultProjections)

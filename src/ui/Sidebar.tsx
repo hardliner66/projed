@@ -1,6 +1,6 @@
 import { Component, For, Show, createMemo } from 'solid-js'
 import type { IrModel, EditCommand } from '../ir/types'
-import { selectedNodeId } from '../editor/state'
+import { selectedNodeId, setSelectedNodeId } from '../editor/state'
 
 interface Props {
   model: IrModel
@@ -28,6 +28,14 @@ const Sidebar: Component<Props> = (props) => {
               <Section title="Types">
                 <Row label="Declared" value={n().analysis?.declaredType ?? '—'} />
                 <Row label="Inferred" value={n().analysis?.inferredType ?? '—'} />
+              </Section>
+            </Show>
+
+            <Show when={(n().analysis?.diagnostics?.length ?? 0) > 0}>
+              <Section title="Diagnostics">
+                <For each={n().analysis?.diagnostics ?? []}>
+                  {(diag) => <div class={`diag-row diag-${diag.severity}`}>{diag.message}</div>}
+                </For>
               </Section>
             </Show>
 
@@ -72,7 +80,12 @@ const Sidebar: Component<Props> = (props) => {
                     const value = resolved
                       ? `${resolved.kind}${resolved.props.name ? ` ${String(resolved.props.name)}` : ''}`
                       : target
-                    return <Row label={role} value={value} />
+                    return (
+                      <div class="info-row clickable" onClick={() => setSelectedNodeId(target)}>
+                        <span class="info-label">{role}</span>
+                        <span class="info-value">{value}</span>
+                      </div>
+                    )
                   }}
                 </For>
               </Section>

@@ -8,6 +8,12 @@ export type Value = string | number | boolean | null
 export interface NodeAnalysis {
   declaredType?: string
   inferredType?: string
+  diagnostics?: Diagnostic[]
+}
+
+export interface Diagnostic {
+  severity: 'error' | 'warning' | 'info'
+  message: string
 }
 
 export interface IrNode {

@@ -258,6 +258,35 @@ body {
   word-break: break-all;
 }
 
+.info-row.clickable {
+  cursor: pointer;
+}
+
+.info-row.clickable:hover .info-value {
+  color: var(--accent);
+}
+
+.diag-row {
+  font-size: 12px;
+  margin-bottom: 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--fg);
+}
+
+.diag-row.diag-error {
+  border-left: 3px solid var(--error);
+}
+
+.diag-row.diag-warning {
+  border-left: 3px solid var(--keyword);
+}
+
+.diag-row.diag-info {
+  border-left: 3px solid var(--accent);
+}
+
 .prop-row {
   display: flex;
   flex-direction: column;

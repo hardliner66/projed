@@ -35,6 +35,61 @@ const initialAst = {
           ],
           body: [
             {
+              id: 'stmt-array',
+              kind: 'LetStmt',
+              props: { name: 'numbers', type: 'Array<Number>' },
+              children: {
+                value: [
+                  {
+                    id: 'array-numbers',
+                    kind: 'ArrayLiteralExpr',
+                    props: {},
+                    children: {
+                      elements: [
+                        { id: 'lit-one', kind: 'LiteralExpr', props: { value: '1' }, children: {} },
+                        { id: 'lit-two', kind: 'LiteralExpr', props: { value: '2' }, children: {} },
+                        { id: 'lit-three', kind: 'LiteralExpr', props: { value: '3' }, children: {} },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              id: 'stmt-negative',
+              kind: 'ExprStmt',
+              props: {},
+              children: {
+                expr: [
+                  {
+                    id: 'unary-negative',
+                    kind: 'UnaryExpr',
+                    props: { op: '-' },
+                    children: {
+                      expr: [{ id: 'lit-ten', kind: 'LiteralExpr', props: { value: '10' }, children: {} }],
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              id: 'stmt-member',
+              kind: 'ExprStmt',
+              props: {},
+              children: {
+                expr: [
+                  {
+                    id: 'member-length',
+                    kind: 'MemberExpr',
+                    props: { member: 'length' },
+                    children: {
+                      object: [{ id: 'id-message-member', kind: 'IdentifierExpr', props: { name: 'message' }, children: {} }],
+                    },
+                  },
+                ],
+              },
+            },
+            {
               id: 'stmt-loop',
               kind: 'ForStmt',
               props: { item: 'item' },
