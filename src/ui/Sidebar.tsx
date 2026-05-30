@@ -13,6 +13,16 @@ const Sidebar: Component<Props> = (props) => {
     return id ? props.model.nodes[id] : null
   })
 
+  const diagnostics = createMemo(() => node()?.analysis?.diagnostics ?? [])
+  const propEntries = createMemo(() => Object.entries(node()?.props ?? {}))
+  const childEntries = createMemo(() => Object.entries(node()?.children ?? {}))
+  const refEntries = createMemo(() => Object.entries(node()?.refs ?? {}))
+
+  function selectReference(target: string) {
+    setEditingNodeProp(null)
+    setSelectedNodeId(target)
+  }
+
   return (
     <aside class="sidebar">
       <div class="sidebar-header">Inspector</div>
@@ -32,20 +42,20 @@ const Sidebar: Component<Props> = (props) => {
               </Section>
             </Show>
 
-            <Show when={(n().analysis?.diagnostics?.length ?? 0) > 0}>
+            <Show when={diagnostics().length > 0}>
               <Section title="Diagnostics">
-                <For each={n().analysis?.diagnostics ?? []}>
+                <For each={diagnostics()}>
                   {(diag) => <div class={`diag-row diag-${diag.severity}`}>{diag.message}</div>}
                 </For>
               </Section>
             </Show>
 
-            <Show when={Object.keys(n().props).length > 0}>
+            <Show when={propEntries().length > 0}>
               <Section title="Properties">
                 <div class="props-grid">
                   <div class="props-grid-header">Property</div>
                   <div class="props-grid-header">Value</div>
-                  <For each={Object.entries(n().props)}>
+                  <For each={propEntries()}>
                     {([key, val]) => (
                       <>
                         <div class="props-grid-key">{key}</div>
@@ -64,9 +74,9 @@ const Sidebar: Component<Props> = (props) => {
               </Section>
             </Show>
 
-            <Show when={Object.keys(n().children).length > 0}>
+            <Show when={childEntries().length > 0}>
               <Section title="Children">
-                <For each={Object.entries(n().children)}>
+                <For each={childEntries()}>
                   {([role, ids]) => (
                     <div class="children-row">
                       <span class="role-label">{role}</span>
@@ -77,16 +87,16 @@ const Sidebar: Component<Props> = (props) => {
               </Section>
             </Show>
 
-            <Show when={Object.keys(n().refs).length > 0}>
+            <Show when={refEntries().length > 0}>
               <Section title="References">
-                <For each={Object.entries(n().refs)}>
+                <For each={refEntries()}>
                   {([role, target]) => {
                     const resolved = props.model.nodes[target]
                     const value = resolved
                       ? `${resolved.kind}${resolved.props.name ? ` ${String(resolved.props.name)}` : ''}`
                       : target
                     return (
-                      <div class="info-row clickable" onClick={() => { setEditingNodeProp(null); setSelectedNodeId(target) }}>
+                      <div class="info-row clickable" onClick={() => selectReference(target)}>
                         <span class="info-label">{role}</span>
                         <span class="info-value">{value}</span>
                       </div>

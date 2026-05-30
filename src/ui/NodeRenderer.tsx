@@ -18,10 +18,14 @@ const NodeRenderer: Component<Props> = (props) => {
   const cells = () => (props.projectionMap ?? getProjections())[node()?.kind]
   const isSelected = () => selectedNodeId() === props.nodeId
 
+  function selectNode(id: string) {
+    setEditingNodeProp(null)
+    setSelectedNodeId(id)
+  }
+
   function handleClick(e: MouseEvent) {
     e.stopPropagation()
-    setEditingNodeProp(null)
-    setSelectedNodeId(props.nodeId)
+    selectNode(props.nodeId)
   }
 
   return (
@@ -77,6 +81,12 @@ interface CellProps {
 const CellRenderer: Component<CellProps> = (props) => {
   const cell = () => props.cell
 
+  function selectSlot(id: string, e: MouseEvent) {
+    e.stopPropagation()
+    setEditingNodeProp(null)
+    setSelectedNodeId(id)
+  }
+
   return (
     <Switch>
       <Match when={cell().type === 'label' && cell() as Extract<CellDef, { type: 'label' }>}>
@@ -103,7 +113,7 @@ const CellRenderer: Component<CellProps> = (props) => {
               <span
                 class="placeholder-slot"
                 classList={{ selected: selectedNodeId() === slotId() }}
-                onClick={(e) => { e.stopPropagation(); setEditingNodeProp(null); setSelectedNodeId(slotId()) }}
+                onClick={(e) => selectSlot(slotId(), e)}
               >‹{c().name}›</span>
             }>
               <NodeRenderer
@@ -148,7 +158,7 @@ const CellRenderer: Component<CellProps> = (props) => {
                 <span
                   class="placeholder-slot empty-list"
                   classList={{ selected: selectedNodeId() === slotId() }}
-                  onClick={(e) => { e.stopPropagation(); setEditingNodeProp(null); setSelectedNodeId(slotId()) }}
+                  onClick={(e) => selectSlot(slotId(), e)}
                 >&lt;empty {c().name}&gt;</span>
               </Show>
             </div>
