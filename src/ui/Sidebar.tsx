@@ -1,5 +1,6 @@
 import { Component, For, Show, createMemo } from 'solid-js'
 import type { IrModel, EditCommand } from '../ir/types'
+import { CONCEPTS } from '../editor/concepts'
 import { selectedNodeId, setSelectedNodeId, setEditingNodeProp } from '../editor/state'
 
 interface Props {
@@ -14,7 +15,16 @@ const Sidebar: Component<Props> = (props) => {
   })
 
   const diagnostics = createMemo(() => node()?.analysis?.diagnostics ?? [])
-  const propEntries = createMemo(() => Object.entries(node()?.props ?? {}))
+
+  const allPropKeys = createMemo(() => {
+    const n = node()
+    if (!n) return []
+    const conceptKeys = Object.keys(CONCEPTS[n.kind]?.defaultProps ?? {})
+    const nodeKeys = Object.keys(n.props)
+    const seen = new Set(conceptKeys)
+    return [...conceptKeys, ...nodeKeys.filter(k => !seen.has(k))]
+  })
+
   const childEntries = createMemo(() => Object.entries(node()?.children ?? {}))
   const refEntries = createMemo(() => Object.entries(node()?.refs ?? {}))
 
@@ -50,22 +60,29 @@ const Sidebar: Component<Props> = (props) => {
               </Section>
             </Show>
 
-            <Show when={propEntries().length > 0}>
+            <Show when={allPropKeys().length > 0}>
               <Section title="Properties">
                 <div class="props-grid">
                   <div class="props-grid-header">Property</div>
                   <div class="props-grid-header">Value</div>
-                  <For each={propEntries()}>
-                    {([key, val]) => (
+                  <For each={allPropKeys()}>
+                    {(key) => (
                       <>
                         <div class="props-grid-key">{key}</div>
                         <input
                           class="prop-input props-grid-input"
                           type="text"
-                          value={String(val ?? '')}
+                          value={String(n().props[key] ?? '')}
                           onChange={(e) =>
                             props.onCommand({ type: 'SET_PROP', nodeId: n().id, prop: key, value: e.currentTarget.value })
                           }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur()
+                            if (e.key === 'Escape') {
+                              e.currentTarget.value = String(n().props[key] ?? '')
+                              e.currentTarget.blur()
+                            }
+                          }}
                         />
                       </>
                     )}
