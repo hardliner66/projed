@@ -5,9 +5,9 @@ import NodeRenderer from './NodeRenderer'
 import Sidebar from './Sidebar'
 import ProjectionEditor from './ProjectionEditor'
 import InsertMenu, { type InsertContext } from './InsertMenu'
-import { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp, setHighlightedNodeIds } from '../editor/state'
+import { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp, setHighlightedNodeIds, collapsedNodeIds, setCollapsedNodeIds, searchState, setSearchState } from '../editor/state'
 import { buildNavOrder, getParentContext, type ParentContext } from '../editor/navigation'
-import { ROLE_ALLOWED_KINDS, CONCEPT_CHILD_SLOTS, makeNode, genId } from '../editor/concepts'
+import { ROLE_ALLOWED_KINDS, CONCEPT_CHILD_SLOTS, CONCEPT_PRIMARY_ROLE, CONCEPTS, makeNode, genId } from '../editor/concepts'
 
 const AUTOSAVE_STORAGE_KEY = 'projed.program.autosave.v1'
 const MANUAL_SAVE_STORAGE_KEY = 'projed.program.saved.v1'
@@ -269,6 +269,9 @@ const App: Component = () => {
   const [clipboardNode, setClipboardNode] = createSignal<any | null>(null)
   const [outputText, setOutputText] = createSignal('')
   const [savedSnapshot, setSavedSnapshot] = createSignal<string>(JSON.stringify(readStoredProgram(MANUAL_SAVE_STORAGE_KEY) ?? initialProgram))
+  const [renameState, setRenameState] = createSignal<{ anchorId: string; currentName: string } | null>(null)
+  const [wrapTargetId, setWrapTargetId] = createSignal<string | null>(null)
+  const [changingNodeId, setChangingNodeId] = createSignal<string | null>(null)
 
   function makeInsertContext(parentId: string, role: string, index: number, allowedKinds: string[]): InsertContext | null {
     const expectedType = getExpectedChildType(model, parentId, role, index)
@@ -416,6 +419,7 @@ const App: Component = () => {
   function selectFirstChild() {
     const nodeId = selectedNodeId()
     if (!nodeId) return
+    if (collapsedNodeIds().has(nodeId)) return
     const node = model.nodes[nodeId]
     if (!node) return
     for (const children of Object.values(node.children)) {
@@ -501,6 +505,38 @@ const App: Component = () => {
   function openInsert(ch: string) { openInsertSibling(ch, false) }
 
   function handleInsert(kind: string, preFill?: Record<string, string>) {
+    // Wrap mode
+    const wrap = wrapTargetId()
+    if (wrap) {
+      setWrapTargetId(null)
+      setInsertCtx(null)
+      setInsertInitialQuery('')
+      const primaryRole = CONCEPT_PRIMARY_ROLE[kind]
+      if (!primaryRole) return
+      const wrapper = makeNode(kind)
+      if (preFill) for (const [k, v] of Object.entries(preFill)) wrapper.props[k] = v
+      applyCommand({ type: 'WRAP_NODE', nodeId: wrap, wrapper, wrapRole: primaryRole })
+      selectNode(wrapper.id)
+      return
+    }
+    // Change-kind mode
+    const changing = changingNodeId()
+    if (changing) {
+      setChangingNodeId(null)
+      setInsertCtx(null)
+      setInsertInitialQuery('')
+      const def = Object.values(CONCEPTS).find(c => c.kind === kind)
+      if (!def) return
+      applyCommand({
+        type: 'CHANGE_KIND',
+        nodeId: changing,
+        newKind: kind,
+        newDefaultProps: def.defaultProps,
+        newDefaultChildRoles: Object.keys(def.defaultChildren),
+      })
+      return
+    }
+    // Normal insert
     const ctx = insertCtx()
     if (!ctx) return
     const node = makeNode(kind)
@@ -625,6 +661,101 @@ const App: Component = () => {
     selectNode(child.id)
   }
 
+  function triggerRename() {
+    const nodeId = selectedNodeId()
+    if (!nodeId) return
+    const node = model.nodes[nodeId]
+    if (!node) return
+    // Find the anchor: this node's declaration, or this node itself if it has referrers
+    const ownDecl = node.refs?.declaration || null
+    const anchorId = ownDecl || nodeId
+    const anchor = model.nodes[anchorId]
+    if (!anchor) return
+    const currentName = String(anchor.props.name ?? '')
+    if (!currentName) return
+    setRenameState({ anchorId, currentName })
+  }
+
+  function openWrapMenu() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const result = getSiblingsOf(nodeId)
+    if (!result) return
+    const node = model.nodes[nodeId]
+    if (!node) return
+    const parentKind = model.nodes[result.ctx.parentId]?.kind ?? ''
+    const roleKinds = ROLE_ALLOWED_KINDS[result.ctx.role] ?? CONCEPT_CHILD_SLOTS[parentKind]?.[result.ctx.role] ?? []
+    // Wrapper candidates: kinds in this role that have a primary role allowing the current kind
+    const wrapperKinds = roleKinds.filter(k => {
+      if (k === node.kind) return false
+      const primary = CONCEPT_PRIMARY_ROLE[k]
+      if (!primary) return false
+      const primaryAllowed = ROLE_ALLOWED_KINDS[primary] ?? CONCEPT_CHILD_SLOTS[k]?.[primary] ?? []
+      return primaryAllowed.includes(node.kind)
+    })
+    if (!wrapperKinds.length) return
+    setWrapTargetId(nodeId)
+    const ctx = makeInsertContext(result.ctx.parentId, result.ctx.role, result.ctx.index, wrapperKinds)
+    setInsertCtx(ctx ?? { parentId: result.ctx.parentId, role: result.ctx.role, index: result.ctx.index, allowedKinds: wrapperKinds })
+    setInsertInitialQuery('')
+  }
+
+  function openChangeKindMenu() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const result = getSiblingsOf(nodeId)
+    if (!result) return
+    const node = model.nodes[nodeId]
+    if (!node) return
+    const parentKind = model.nodes[result.ctx.parentId]?.kind ?? ''
+    const roleKinds = (ROLE_ALLOWED_KINDS[result.ctx.role] ?? CONCEPT_CHILD_SLOTS[parentKind]?.[result.ctx.role] ?? []).filter(k => k !== node.kind)
+    if (!roleKinds.length) return
+    setChangingNodeId(nodeId)
+    const ctx = makeInsertContext(result.ctx.parentId, result.ctx.role, result.ctx.index, roleKinds)
+    setInsertCtx(ctx ?? { parentId: result.ctx.parentId, role: result.ctx.role, index: result.ctx.index, allowedKinds: roleKinds })
+    setInsertInitialQuery('')
+  }
+
+  function toggleFold() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    setCollapsedNodeIds(prev => {
+      const next = new Set<string>(prev)
+      if (next.has(nodeId)) next.delete(nodeId)
+      else next.add(nodeId)
+      return next
+    })
+  }
+
+  function openSearch() {
+    setSearchState({ query: '', matchIds: [], cursor: 0 })
+  }
+
+  function closeSearch() {
+    setSearchState(null)
+  }
+
+  function updateSearch(query: string) {
+    if (!query.trim()) { setSearchState({ query, matchIds: [], cursor: 0 }); return }
+    const q = query.toLowerCase()
+    const matchIds = Object.values(model.nodes)
+      .filter(n => {
+        if (n.kind.toLowerCase().includes(q)) return true
+        return Object.values(n.props).some(v => v !== null && String(v).toLowerCase().includes(q))
+      })
+      .map(n => n.id)
+    setSearchState({ query, matchIds, cursor: 0 })
+    if (matchIds.length > 0) selectNode(matchIds[0])
+  }
+
+  function searchNavigate(delta: number) {
+    const s = searchState()
+    if (!s || s.matchIds.length === 0) return
+    const next = (s.cursor + delta + s.matchIds.length) % s.matchIds.length
+    setSearchState({ ...s, cursor: next })
+    selectNode(s.matchIds[next])
+  }
+
   function runProgram() {
     const errorDiagnostics = Object.values(model.nodes)
       .flatMap((node) => (node.analysis?.diagnostics ?? []).map((diag) => ({ node, diag })))
@@ -677,6 +808,11 @@ const App: Component = () => {
   })
 
   function onKeyDown(e: KeyboardEvent) {
+    if (searchState()) {
+      if (e.key === 'Escape') { e.preventDefault(); closeSearch(); return }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); searchNavigate(1); return }
+      if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); searchNavigate(-1); return }
+    }
     if (insertCtx()) return
     const withMeta = e.ctrlKey || e.metaKey
     if (withMeta && !e.altKey) {
@@ -687,7 +823,10 @@ const App: Component = () => {
       if (key === 'v' && !isEditingInput()) { e.preventDefault(); pasteClipboard(); return }
       if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return }
       if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return }
+      if (key === 'enter') { e.preventDefault(); runProgram(); return }
+      if (key === 'f') { e.preventDefault(); openSearch(); return }
     }
+    if (e.key === 'F5') { e.preventDefault(); runProgram(); return }
     if (isEditingInput()) return
     if (e.ctrlKey || e.metaKey || e.altKey) return
     switch (e.key) {
@@ -698,6 +837,11 @@ const App: Component = () => {
       case 'ArrowRight': case 'l': e.preventDefault(); selectNextSiblingOrChild(); break
       case '0': case '_': e.preventDefault(); selectFirstSibling(); break
       case '$': e.preventDefault(); selectLastSibling(); break
+      case 'u': e.preventDefault(); selectParent(); break
+      case 'r': e.preventDefault(); triggerRename(); break
+      case 'W': e.preventDefault(); openWrapMenu(); break
+      case 'K': e.preventDefault(); openChangeKindMenu(); break
+      case 'z': e.preventDefault(); toggleFold(); break
       case 'd': e.preventDefault(); duplicateSelected(); break
       case '[': e.preventDefault(); moveSelectedUp(); break
       case ']': e.preventDefault(); moveSelectedDown(); break
@@ -733,7 +877,7 @@ const App: Component = () => {
     if (!sel) return 'Click or hjkl/↑↓←→ to select a node'
     if (sel === model.rootId) return 'hjkl navigate'
     if (parseSlotId(sel)) return 'e / i / a fill slot · Esc deselect'
-    return 'hjkl/↑↓←→ navigate · 0/$ first/last · d dup · [/] move · e edit · i/a insert · I child · Del delete · Ctrl+C/X/V · Ctrl+Z/Y'
+      return 'hjkl/↑↓←→ · u parent · 0/$ first/last · d dup · [/] move · e edit · r rename · W wrap · K change · z fold · i/a/I insert · Del delete · Ctrl+Enter run · Ctrl+F search'
   })
 
   return (
@@ -783,6 +927,57 @@ const App: Component = () => {
             onSelect={handleInsert}
             onClose={() => { setInsertCtx(null); setInsertInitialQuery('') }}
           />
+        )}
+      </Show>
+      <Show when={renameState()}>
+        {(state) => {
+          let renameRef!: HTMLInputElement
+          return (
+            <div class="rename-backdrop" onClick={() => setRenameState(null)}>
+              <div class="rename-dialog" onClick={e => e.stopPropagation()}>
+                <div class="rename-label">Rename <strong>{state().currentName}</strong></div>
+                <input
+                  ref={el => { renameRef = el; setTimeout(() => { el.select() }, 0) }}
+                  class="rename-input"
+                  type="text"
+                  value={state().currentName}
+                  onKeyDown={e => {
+                    e.stopPropagation()
+                    if (e.key === 'Enter') {
+                      const newName = e.currentTarget.value.trim()
+                      if (newName && newName !== state().currentName)
+                        applyCommand({ type: 'RENAME_SYMBOL', nodeId: state().anchorId, newName })
+                      setRenameState(null)
+                    }
+                    if (e.key === 'Escape') setRenameState(null)
+                  }}
+                />
+              </div>
+            </div>
+          )
+        }}
+      </Show>
+      <Show when={searchState()}>
+        {(s) => (
+          <div class="search-panel">
+            <input
+              class="search-input"
+              type="text"
+              placeholder="Search nodes…"
+              value={s().query}
+              onInput={e => updateSearch(e.currentTarget.value)}
+              onKeyDown={e => {
+                e.stopPropagation()
+                if (e.key === 'Escape') closeSearch()
+                if (e.key === 'Enter') searchNavigate(e.shiftKey ? -1 : 1)
+              }}
+              ref={el => setTimeout(() => el?.focus(), 0)}
+            />
+            <span class="search-count">
+              {s().matchIds.length > 0 ? `${s().cursor + 1} / ${s().matchIds.length}` : 'no matches'}
+            </span>
+            <button class="search-close" onClick={closeSearch}>✕</button>
+          </div>
         )}
       </Show>
     </div>

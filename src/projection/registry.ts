@@ -127,17 +127,19 @@ const rustProjections: ProjectionMap = {
           ]
         },
         { type: 'label', text: '}', style: 'punct' },
-        {
-          type: 'block', direction: 'row', children: [
-            { type: 'label', text: 'else {', style: 'keyword' },
-          ]
-        },
-        {
-          type: 'indent', children: [
-            { type: 'childList', name: 'elseBody', indent: true },
-          ]
-        },
-        { type: 'label', text: '}', style: 'punct' },
+        { type: 'when', role: 'elseBody', children: [
+          {
+            type: 'block', direction: 'row', children: [
+              { type: 'label', text: 'else {', style: 'keyword' },
+            ]
+          },
+          {
+            type: 'indent', children: [
+              { type: 'childList', name: 'elseBody', indent: true },
+            ]
+          },
+          { type: 'label', text: '}', style: 'punct' },
+        ]},
       ]
     },
   ],
@@ -385,12 +387,14 @@ const pythonProjections: ProjectionMap = {
             { type: 'childList', name: 'thenBody', indent: true },
           ]
         },
-        { type: 'label', text: 'else:', style: 'keyword' },
-        {
-          type: 'indent', children: [
-            { type: 'childList', name: 'elseBody', indent: true },
-          ]
-        },
+        { type: 'when', role: 'elseBody', children: [
+          { type: 'label', text: 'else:', style: 'keyword' },
+          {
+            type: 'indent', children: [
+              { type: 'childList', name: 'elseBody', indent: true },
+            ]
+          },
+        ]},
       ]
     },
   ],
@@ -635,13 +639,18 @@ const cProjections: ProjectionMap = {
             { type: 'childList', name: 'thenBody', indent: true },
           ]
         },
-        { type: 'label', text: '} else {', style: 'punct' },
-        {
-          type: 'indent', children: [
-            { type: 'childList', name: 'elseBody', indent: true },
-          ]
-        },
         { type: 'label', text: '}', style: 'punct' },
+        { type: 'when', role: 'elseBody', children: [
+          { type: 'block', direction: 'row', children: [
+            { type: 'label', text: 'else {', style: 'punct' },
+          ]},
+          {
+            type: 'indent', children: [
+              { type: 'childList', name: 'elseBody', indent: true },
+            ]
+          },
+          { type: 'label', text: '}', style: 'punct' },
+        ]},
       ]
     },
   ],

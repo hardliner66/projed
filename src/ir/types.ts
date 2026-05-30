@@ -38,3 +38,6 @@ export type EditCommand =
   | { type: 'DELETE_NODE'; nodeId: NodeId; parentId: NodeId; role: RoleId }
   | { type: 'MOVE_CHILD'; parentId: NodeId; role: RoleId; fromIndex: number; toIndex: number }
   | { type: 'REPLACE_NODE'; nodeId: NodeId; replacement: IrNode }
+  | { type: 'RENAME_SYMBOL'; nodeId: NodeId; newName: string }
+  | { type: 'WRAP_NODE'; nodeId: NodeId; wrapper: IrNode; wrapRole: RoleId }
+  | { type: 'CHANGE_KIND'; nodeId: NodeId; newKind: string; newDefaultProps: Record<PropertyId, Value>; newDefaultChildRoles: RoleId[] }

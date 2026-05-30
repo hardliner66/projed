@@ -6,5 +6,6 @@ export type CellDef =
   | { type: 'block'; direction?: 'row' | 'col'; children: CellDef[] }
   | { type: 'indent'; children: CellDef[] }
   | { type: 'newline' }
+  | { type: 'when'; role: string; children: CellDef[] }
 
 export type ProjectionMap = Record<string, CellDef[]>

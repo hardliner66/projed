@@ -223,6 +223,23 @@ export const CONCEPT_CHILD_SLOTS: Record<string, Record<string, string[]>> = {
   },
 }
 
+// The "primary" child role used for wrap operations — the slot that holds the wrapped content
+export const CONCEPT_PRIMARY_ROLE: Record<string, string> = {
+  UnaryExpr: 'expr',
+  BinaryExpr: 'left',
+  AssignExpr: 'value',
+  CallExpr: 'callee',
+  MemberExpr: 'object',
+  IndexExpr: 'object',
+  ExprStmt: 'expr',
+  ReturnStmt: 'value',
+  LetStmt: 'value',
+  LetDecl: 'value',
+  IfStmt: 'condition',
+  WhileStmt: 'condition',
+  ForStmt: 'iterable',
+}
+
 export function makeNode(kind: string): any {
   const def = CONCEPTS[kind]
   if (!def) throw new Error(`Unknown concept: ${kind}`)

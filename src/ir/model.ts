@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from 'solid-js/store'
-import type { Diagnostic, IrModel, IrNode, NodeId, EditCommand } from './types'
+import type { Diagnostic, IrModel, IrNode, NodeId, EditCommand, Value } from './types'
 
 interface CallSignature {
   returnType: string
@@ -744,6 +744,57 @@ export function createIrModel(initialRoot: any) {
             }
           }
           delete m.nodes[cmd.nodeId]
+          break
+        }
+        case 'RENAME_SYMBOL': {
+          const decl = m.nodes[cmd.nodeId]
+          if (!decl) break
+          decl.props.name = cmd.newName
+          for (const n of Object.values(m.nodes)) {
+            if (n.refs?.declaration === cmd.nodeId) n.props.name = cmd.newName
+          }
+          break
+        }
+        case 'WRAP_NODE': {
+          let parentId = ''
+          let parentRole = ''
+          let parentIdx = -1
+          outer: for (const [pid, pnode] of Object.entries(m.nodes)) {
+            for (const [role, children] of Object.entries(pnode.children)) {
+              const i = children.indexOf(cmd.nodeId)
+              if (i >= 0) { parentId = pid; parentRole = role; parentIdx = i; break outer }
+            }
+          }
+          if (!parentId || parentIdx < 0) break
+          const wrapper = seedModel(cmd.wrapper, m.nodes)
+          m.nodes[parentId].children[parentRole][parentIdx] = wrapper.id
+          wrapper.children[cmd.wrapRole] = [cmd.nodeId]
+          break
+        }
+        case 'CHANGE_KIND': {
+          const node = m.nodes[cmd.nodeId]
+          if (!node) break
+          const newProps: Record<string, Value> = { ...cmd.newDefaultProps }
+          for (const [k, v] of Object.entries(node.props)) {
+            if (k in newProps) newProps[k] = v
+          }
+          const keptRoles = new Set(cmd.newDefaultChildRoles)
+          const newChildren: Record<string, string[]> = {}
+          for (const role of cmd.newDefaultChildRoles) {
+            newChildren[role] = node.children[role] ? [...node.children[role]] : []
+          }
+          function dropSubtree(id: string) {
+            const n = m.nodes[id]; if (!n) return
+            for (const ids of Object.values(n.children)) for (const c of ids) dropSubtree(c)
+            delete m.nodes[id]
+          }
+          for (const [role, ids] of Object.entries(node.children)) {
+            if (!keptRoles.has(role)) for (const id of ids) dropSubtree(id)
+          }
+          node.kind = cmd.newKind
+          node.props = newProps
+          node.children = newChildren
+          node.refs = {}
           break
         }
       }

@@ -40,18 +40,39 @@ function firstChild(node: IrNode, role: string): string | undefined {
     return node.children[role]?.[0]
 }
 
+function parseStringLiteral(raw: string): string {
+    const inner = raw.slice(1, -1)
+    let result = ''
+    let i = 0
+    while (i < inner.length) {
+        if (inner[i] === '\\' && i + 1 < inner.length) {
+            i++
+            switch (inner[i]) {
+                case 'n':  result += '\n'; break
+                case 't':  result += '\t'; break
+                case 'r':  result += '\r'; break
+                case '0':  result += '\0'; break
+                case '\\': result += '\\'; break
+                case "'":  result += "'"; break
+                case '"':  result += '"'; break
+                default:   result += '\\' + inner[i]
+            }
+        } else {
+            result += inner[i]
+        }
+        i++
+    }
+    return result
+}
+
 function parseLiteral(raw: string): RuntimeValue {
     const value = raw.trim()
     if (value === 'true') return true
     if (value === 'false') return false
     if (value === 'null') return null
     if (/^[-+]?\d+(\.\d+)?$/.test(value)) return Number(value)
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        try {
-            return JSON.parse(value.startsWith("'") ? `"${value.slice(1, -1).replace(/"/g, '\\"')}"` : value)
-        } catch {
-            return value.slice(1, -1)
-        }
+    if ((value.startsWith('"') && value.endsWith('"') || value.startsWith("'") && value.endsWith("'")) && value.length >= 2) {
+        return parseStringLiteral(value)
     }
     return value
 }
@@ -144,6 +165,23 @@ export function runIrProgram(model: IrModel): string {
                 if (target?.kind === 'IdentifierExpr') {
                     const name = String(target.props.name ?? '')
                     if (!env.assign(name, value)) env.define(name, value)
+                }
+                if (target?.kind === 'IndexExpr') {
+                    const obj = evalExpr(firstChild(target, 'object'), env)
+                    const idx = evalExpr(firstChild(target, 'index'), env)
+                    if (Array.isArray(obj)) {
+                        const i = Number(idx ?? 0)
+                        if (i >= 0 && i < obj.length) obj[i] = value
+                    } else if (obj !== null && typeof obj === 'object' && !Array.isArray(obj)) {
+                        ;(obj as Record<string, RuntimeValue>)[String(idx ?? '')] = value
+                    }
+                }
+                if (target?.kind === 'MemberExpr') {
+                    const obj = evalExpr(firstChild(target, 'object'), env)
+                    const member = String(target.props.member ?? '')
+                    if (obj !== null && typeof obj === 'object' && !Array.isArray(obj)) {
+                        ;(obj as Record<string, RuntimeValue>)[member] = value
+                    }
                 }
                 return value
             }
