@@ -175,6 +175,7 @@ export const ROLE_ALLOWED_KINDS: Record<string, string[]> = {
   args: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
   target: ['IdentifierExpr'],
   iterable: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
+  elements: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
   thenBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
   elseBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
 }

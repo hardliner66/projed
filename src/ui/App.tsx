@@ -313,6 +313,14 @@ const App: Component = () => {
     return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
   }
 
+  function parseSlotId(id: string): { parentId: string; role: string } | null {
+    if (!id.startsWith('__slot__:')) return null
+    const rest = id.slice('__slot__:'.length)
+    const colonIdx = rest.indexOf(':')
+    if (colonIdx < 0) return null
+    return { parentId: rest.slice(0, colonIdx), role: rest.slice(colonIdx + 1) }
+  }
+
   // ── Navigation ──────────────────────────────────────────────────────────────
 
   function selectNode(nodeId: string | null) {
@@ -339,8 +347,23 @@ const App: Component = () => {
   function selectParent() {
     const nodeId = selectedNodeId()
     if (!nodeId || nodeId === model.rootId) return
+    const slot = parseSlotId(nodeId)
+    if (slot) { selectNode(slot.parentId); return }
     const ctx = getParentContext(model, nodeId)
     if (ctx) selectNode(ctx.parentId)
+  }
+
+  // h: prev sibling if one exists, else go to parent
+  function selectPrevSiblingOrParent() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const slot = parseSlotId(nodeId)
+    if (slot) { selectNode(slot.parentId); return }
+    const ctx = getParentContext(model, nodeId)
+    if (!ctx) return
+    const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
+    if (ctx.index > 0) selectNode(siblings[ctx.index - 1])
+    else selectNode(ctx.parentId)
   }
 
   function selectFirstChild() {
@@ -353,11 +376,59 @@ const App: Component = () => {
     }
   }
 
+  // l: next sibling if one exists, else descend into first child
+  function selectNextSiblingOrChild() {
+    const nodeId = selectedNodeId()
+    if (!nodeId) return
+    if (!parseSlotId(nodeId)) {
+      const ctx = getParentContext(model, nodeId)
+      if (ctx) {
+        const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
+        if (ctx.index < siblings.length - 1) { selectNode(siblings[ctx.index + 1]); return }
+      }
+    }
+    selectFirstChild()
+  }
+
+  function selectFirstSibling() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const slot = parseSlotId(nodeId)
+    if (slot) return
+    const ctx = getParentContext(model, nodeId)
+    if (!ctx) return
+    const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
+    if (siblings.length > 0) selectNode(siblings[0])
+  }
+
+  function selectLastSibling() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const slot = parseSlotId(nodeId)
+    if (slot) return
+    const ctx = getParentContext(model, nodeId)
+    if (!ctx) return
+    const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
+    if (siblings.length > 0) selectNode(siblings[siblings.length - 1])
+  }
+
   // ── Insert helpers ───────────────────────────────────────────────────────────
 
   function openInsertSibling(ch: string, above = false) {
     const nodeId = selectedNodeId()
     if (!nodeId || nodeId === model.rootId) return
+    // placeholder slot: both i and a fill the slot
+    const slot = parseSlotId(nodeId)
+    if (slot) {
+      const allowed = ROLE_ALLOWED_KINDS[slot.role] ?? []
+      if (!allowed.length) return
+      const parent = model.nodes[slot.parentId]
+      if (!parent) return
+      const index = (parent.children[slot.role] ?? []).length
+      setInsertCtx({ parentId: slot.parentId, role: slot.role, index, allowedKinds: allowed })
+      setInsertInitialQuery(ch)
+      return
+    }
     const ctx = getParentContext(model, nodeId)
     if (!ctx) return
     const allowed = ROLE_ALLOWED_KINDS[ctx.role] ?? []
@@ -416,6 +487,17 @@ const App: Component = () => {
   function startEditingFirstProp() {
     const nodeId = selectedNodeId()
     if (!nodeId) return
+    const slot = parseSlotId(nodeId)
+    if (slot) {
+      const allowed = ROLE_ALLOWED_KINDS[slot.role] ?? []
+      if (!allowed.length) return
+      const parent = model.nodes[slot.parentId]
+      if (!parent) return
+      const index = (parent.children[slot.role] ?? []).length
+      setInsertCtx({ parentId: slot.parentId, role: slot.role, index, allowedKinds: allowed })
+      setInsertInitialQuery('')
+      return
+    }
     const node = model.nodes[nodeId]
     if (!node) return
     const firstProp = Object.keys(node.props)[0]
@@ -500,14 +582,18 @@ const App: Component = () => {
       // ── Movement ──
       case 'ArrowDown': case 'j': e.preventDefault(); selectNext(); break
       case 'ArrowUp': case 'k': e.preventDefault(); selectPrev(); break
-      case 'ArrowLeft': case 'h': e.preventDefault(); selectParent(); break
-      case 'ArrowRight': case 'l': e.preventDefault(); selectFirstChild(); break
+      case 'ArrowLeft': case 'h': e.preventDefault(); selectPrevSiblingOrParent(); break
+      case 'ArrowRight': case 'l': e.preventDefault(); selectNextSiblingOrChild(); break
+      case '0': case '_': e.preventDefault(); selectFirstSibling(); break
+      case '$': e.preventDefault(); selectLastSibling(); break
       // ── Edit ──
       case 'e':
       case 'Enter':
       case 'F2': e.preventDefault(); startEditingFirstProp(); break
       // ── Insert ──
-      case 'i': e.preventDefault(); openInsertChild(); break
+      case 'i': e.preventDefault(); openInsertSibling('', true); break
+      case 'a': e.preventDefault(); openInsertSibling('', false); break
+      case 'I': e.preventDefault(); openInsertChild(); break
       case 'o': e.preventDefault(); openInsertSibling('', false); break
       case 'O': e.preventDefault(); openInsertSibling('', true); break
       // ── Delete ──
@@ -531,7 +617,8 @@ const App: Component = () => {
     const sel = selectedNodeId()
     if (!sel) return 'Click or hjkl/↑↓←→ to select a node'
     if (sel === model.rootId) return 'hjkl navigate'
-    return 'hjkl/↑↓←→ navigate · e edit · i insert child · o sibling below · O sibling above · Del delete · Ctrl+C/X/V · Ctrl+Z/Y'
+    if (parseSlotId(sel)) return 'e / i / a fill slot · Esc deselect'
+    return 'hjkl/↑↓←→ navigate · 0/$ first/last sibling · e edit · i before · a after · I insert child · Del delete · Ctrl+C/X/V · Ctrl+Z/Y'
   })
 
   return (

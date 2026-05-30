@@ -96,9 +96,16 @@ const CellRenderer: Component<CellProps> = (props) => {
 
       <Match when={cell().type === 'child' && cell() as Extract<CellDef, { type: 'child' }>}>
         {(c) => {
+          const slotId = () => `__slot__:${props.node.id}:${c().name}`
           const childId = () => props.node.children[c().name]?.[0]
           return (
-            <Show when={childId()}>
+            <Show when={childId()} fallback={
+              <span
+                class="placeholder-slot"
+                classList={{ selected: selectedNodeId() === slotId() }}
+                onClick={(e) => { e.stopPropagation(); setEditingNodeProp(null); setSelectedNodeId(slotId()) }}
+              >‹{c().name}›</span>
+            }>
               <NodeRenderer
                 nodeId={childId()!}
                 model={props.model}
