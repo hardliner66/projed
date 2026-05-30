@@ -359,11 +359,9 @@ const App: Component = () => {
     return { parentId: rest.slice(0, colonIdx), role: rest.slice(colonIdx + 1) }
   }
 
-  function getSiblingsOfCurrentNode(): { siblings: string[]; ctx: ParentContext } | null {
-    const nodeId = selectedNodeId()
+  function getSiblingsOf(nodeId: string | null): { siblings: string[]; ctx: ParentContext } | null {
     if (!nodeId || nodeId === model.rootId) return null
-    const slot = parseSlotId(nodeId)
-    if (slot) return null
+    if (parseSlotId(nodeId)) return null
     const ctx = getParentContext(model, nodeId)
     if (!ctx) return null
     const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
@@ -405,10 +403,10 @@ const App: Component = () => {
   // h: prev sibling if one exists, else go to parent
   function selectPrevSiblingOrParent() {
     const nodeId = selectedNodeId()
-    if (!nodeId || nodeId === model.rootId) return
+    if (!nodeId) return
     const slot = parseSlotId(nodeId)
     if (slot) { selectNode(slot.parentId); return }
-    const result = getSiblingsOfCurrentNode()
+    const result = getSiblingsOf(nodeId)
     if (!result) return
     const { siblings, ctx } = result
     if (ctx.index > 0) selectNode(siblings[ctx.index - 1])
@@ -429,7 +427,7 @@ const App: Component = () => {
   function selectNextSiblingOrChild() {
     const nodeId = selectedNodeId()
     if (!nodeId) return
-    const result = getSiblingsOfCurrentNode()
+    const result = getSiblingsOf(nodeId)
     if (result && result.ctx.index < result.siblings.length - 1) {
       selectNode(result.siblings[result.ctx.index + 1])
       return
@@ -438,12 +436,12 @@ const App: Component = () => {
   }
 
   function selectFirstSibling() {
-    const result = getSiblingsOfCurrentNode()
+    const result = getSiblingsOf(selectedNodeId())
     if (result && result.siblings.length > 0) selectNode(result.siblings[0])
   }
 
   function selectLastSibling() {
-    const result = getSiblingsOfCurrentNode()
+    const result = getSiblingsOf(selectedNodeId())
     if (result && result.siblings.length > 0) selectNode(result.siblings[result.siblings.length - 1])
   }
 
@@ -517,11 +515,10 @@ const App: Component = () => {
   function deleteSelected() {
     const nodeId = selectedNodeId()
     if (!nodeId || nodeId === model.rootId) return
-    const ctx = getParentContext(model, nodeId)
-    if (!ctx) return
-    const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
-    const idx = siblings.indexOf(nodeId)
-    const nextSelected = idx + 1 < siblings.length ? siblings[idx + 1] : idx > 0 ? siblings[idx - 1] : ctx.parentId
+    const result = getSiblingsOf(nodeId)
+    if (!result) return
+    const { siblings, ctx } = result
+    const nextSelected = ctx.index + 1 < siblings.length ? siblings[ctx.index + 1] : ctx.index > 0 ? siblings[ctx.index - 1] : ctx.parentId
     applyCommand({ type: 'DELETE_NODE', nodeId, parentId: ctx.parentId, role: ctx.role })
     selectNode(nextSelected)
   }
