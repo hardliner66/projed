@@ -119,6 +119,7 @@ const CellRenderer: Component<CellProps> = (props) => {
 
       <Match when={cell().type === 'childList' && cell() as Extract<CellDef, { type: 'childList' }>}>
         {(c) => {
+          const slotId = () => `__slot__:${props.node.id}:${c().name}`
           const ids = () => props.node.children[c().name] ?? []
           return (
             <div class={`child-list ${c().indent ? 'indented' : ''} ${c().inline ? 'inline' : ''}`}>
@@ -144,7 +145,11 @@ const CellRenderer: Component<CellProps> = (props) => {
                 )}
               </For>
               <Show when={ids().length === 0}>
-                <span class="empty-list">&lt;empty {c().name}&gt;</span>
+                <span
+                  class="placeholder-slot empty-list"
+                  classList={{ selected: selectedNodeId() === slotId() }}
+                  onClick={(e) => { e.stopPropagation(); setEditingNodeProp(null); setSelectedNodeId(slotId()) }}
+                >&lt;empty {c().name}&gt;</span>
               </Show>
             </div>
           )
