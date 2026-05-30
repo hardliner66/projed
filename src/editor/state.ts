@@ -8,5 +8,6 @@ export interface EditingProp {
 
 const [selectedNodeId, setSelectedNodeId] = createSignal<NodeId | null>(null)
 const [editingNodeProp, setEditingNodeProp] = createSignal<EditingProp | null>(null)
+const [highlightedNodeIds, setHighlightedNodeIds] = createSignal<ReadonlySet<string>>(new Set<string>())
 
-export { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp }
+export { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp, highlightedNodeIds, setHighlightedNodeIds }

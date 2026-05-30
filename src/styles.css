@@ -140,6 +140,11 @@ body {
   outline: 1px solid var(--selected-border);
 }
 
+.node-wrapper.referenced {
+  outline: 1px solid color-mix(in srgb, #f9e2af 55%, transparent);
+  background: color-mix(in srgb, #f9e2af 6%, transparent);
+}
+
 .node-wrapper.has-error {
   outline: 1px solid color-mix(in srgb, var(--error) 60%, transparent);
 }

@@ -5,7 +5,7 @@ import NodeRenderer from './NodeRenderer'
 import Sidebar from './Sidebar'
 import ProjectionEditor from './ProjectionEditor'
 import InsertMenu, { type InsertContext } from './InsertMenu'
-import { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp } from '../editor/state'
+import { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp, setHighlightedNodeIds } from '../editor/state'
 import { buildNavOrder, getParentContext, type ParentContext } from '../editor/navigation'
 import { ROLE_ALLOWED_KINDS, CONCEPT_CHILD_SLOTS, makeNode, genId } from '../editor/concepts'
 
@@ -647,6 +647,29 @@ const App: Component = () => {
       setOutputText(`[runtime error] ${String(e)}`)
     }
   }
+
+  createEffect(() => {
+    const nodeId = selectedNodeId()
+    if (!nodeId) { setHighlightedNodeIds(new Set<string>()); return }
+    const node = model.nodes[nodeId]
+    if (!node) { setHighlightedNodeIds(new Set<string>()); return }
+
+    const ids = new Set<string>()
+    // Resolve the declaration anchor: either this node IS the declaration (others ref it),
+    // or this node holds a ref to its own declaration.
+    const ownDecl = node.refs?.declaration || null  // '' for builtins → falsy
+    const anchorId = ownDecl || nodeId
+
+    for (const n of Object.values(model.nodes)) {
+      if (n.id === nodeId) continue
+      const decl = n.refs?.declaration
+      if (decl && decl === anchorId) ids.add(n.id)  // usages of the anchor
+    }
+    // If this node is itself a usage, also highlight its declaration
+    if (ownDecl) ids.add(ownDecl)
+
+    setHighlightedNodeIds(ids)
+  })
 
   createEffect(() => {
     const snapshot = serializeSubtree(model.rootId)

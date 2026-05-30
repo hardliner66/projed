@@ -2,7 +2,7 @@ import { Component, For, Show, Switch, Match } from 'solid-js'
 import type { IrNode, IrModel, EditCommand } from '../ir/types'
 import type { CellDef, ProjectionMap } from '../projection/types'
 import { getProjections } from '../projection/registry'
-import { selectedNodeId, setSelectedNodeId, setEditingNodeProp } from '../editor/state'
+import { selectedNodeId, setSelectedNodeId, setEditingNodeProp, highlightedNodeIds } from '../editor/state'
 import LabelCell from './cells/LabelCell'
 import PropCell from './cells/PropCell'
 
@@ -17,6 +17,7 @@ const NodeRenderer: Component<Props> = (props) => {
   const node = () => props.model.nodes[props.nodeId]
   const cells = () => (props.projectionMap ?? getProjections())[node()?.kind]
   const isSelected = () => selectedNodeId() === props.nodeId
+  const isReferenced = () => highlightedNodeIds().has(props.nodeId)
   const hasDiagError = () => node()?.analysis?.diagnostics?.some(d => d.severity === 'error') ?? false
   const hasDiagWarning = () => node()?.analysis?.diagnostics?.some(d => d.severity === 'warning') ?? false
 
@@ -33,7 +34,7 @@ const NodeRenderer: Component<Props> = (props) => {
   return (
     <Show when={node()} fallback={<span class="error">missing:{props.nodeId}</span>}>
       <div
-        class={`node-wrapper${isSelected() ? ' selected' : ''}${hasDiagError() ? ' has-error' : hasDiagWarning() ? ' has-warning' : ''}`}
+        class={`node-wrapper${isSelected() ? ' selected' : ''}${isReferenced() ? ' referenced' : ''}${hasDiagError() ? ' has-error' : hasDiagWarning() ? ' has-warning' : ''}`}
         onClick={handleClick}
       >
         <Show when={cells()} fallback={<FallbackRenderer node={node()} />}>
