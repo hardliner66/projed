@@ -9,7 +9,8 @@ import { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp 
 import { buildNavOrder, getParentContext } from '../editor/navigation'
 import { ROLE_ALLOWED_KINDS, CONCEPT_CHILD_SLOTS, makeNode, genId } from '../editor/concepts'
 
-const PROGRAM_STORAGE_KEY = 'projed.program.v1'
+const AUTOSAVE_STORAGE_KEY = 'projed.program.autosave.v1'
+const MANUAL_SAVE_STORAGE_KEY = 'projed.program.saved.v1'
 
 const baseExampleAst = {
   id: 'file-1',
@@ -242,9 +243,9 @@ function cloneAst<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-function readStoredProgram(): any | null {
+function readStoredProgram(key: string): any | null {
   try {
-    const raw = globalThis.localStorage?.getItem(PROGRAM_STORAGE_KEY)
+    const raw = globalThis.localStorage?.getItem(key)
     if (!raw) return null
     return JSON.parse(raw)
   } catch {
@@ -252,20 +253,22 @@ function readStoredProgram(): any | null {
   }
 }
 
-function writeStoredProgram(program: any) {
+function writeStoredProgram(key: string, program: any) {
   try {
-    globalThis.localStorage?.setItem(PROGRAM_STORAGE_KEY, JSON.stringify(program))
+    globalThis.localStorage?.setItem(key, JSON.stringify(program))
   } catch {
     // Ignore storage failures.
   }
 }
 
 const App: Component = () => {
-  const { model, applyCommand, undo, redo, replaceModel } = createIrModel(readStoredProgram() ?? cloneAst(baseExampleAst))
+  const initialProgram = readStoredProgram(AUTOSAVE_STORAGE_KEY) ?? readStoredProgram(MANUAL_SAVE_STORAGE_KEY) ?? cloneAst(baseExampleAst)
+  const { model, applyCommand, undo, redo, replaceModel } = createIrModel(initialProgram)
   const [insertCtx, setInsertCtx] = createSignal<InsertContext | null>(null)
   const [insertInitialQuery, setInsertInitialQuery] = createSignal('')
   const [clipboardNode, setClipboardNode] = createSignal<any | null>(null)
   const [outputText, setOutputText] = createSignal('')
+  const [savedSnapshot, setSavedSnapshot] = createSignal<string>(JSON.stringify(readStoredProgram(MANUAL_SAVE_STORAGE_KEY) ?? initialProgram))
 
   function makeInsertContext(parentId: string, role: string, index: number, allowedKinds: string[]): InsertContext | null {
     const expectedType = getExpectedChildType(model, parentId, role, index)
@@ -293,26 +296,41 @@ const App: Component = () => {
   function saveProgram() {
     const snapshot = serializeSubtree(model.rootId)
     if (!snapshot) return
-    writeStoredProgram(snapshot)
+    const serialized = JSON.stringify(snapshot)
+    writeStoredProgram(MANUAL_SAVE_STORAGE_KEY, snapshot)
+    writeStoredProgram(AUTOSAVE_STORAGE_KEY, snapshot)
+    setSavedSnapshot(serialized)
     setOutputText('[saved] current program stored in browser localStorage')
   }
 
   function loadProgram() {
-    const snapshot = readStoredProgram()
+    const snapshot = readStoredProgram(MANUAL_SAVE_STORAGE_KEY)
     if (!snapshot) {
       setOutputText('[load failed] no saved program found in browser localStorage')
       return
     }
     replaceModel(snapshot)
     selectNode(null)
+    const serialized = JSON.stringify(snapshot)
+    writeStoredProgram(AUTOSAVE_STORAGE_KEY, snapshot)
+    setSavedSnapshot(serialized)
     setOutputText('[loaded] restored program from browser localStorage')
   }
 
   function loadBaseExample() {
-    replaceModel(cloneAst(baseExampleAst))
+    const snapshot = cloneAst(baseExampleAst)
+    replaceModel(snapshot)
     selectNode(null)
+    writeStoredProgram(AUTOSAVE_STORAGE_KEY, snapshot)
     setOutputText('[loaded] base example restored')
   }
+
+  const currentSnapshot = createMemo(() => {
+    const snapshot = serializeSubtree(model.rootId)
+    return snapshot ? JSON.stringify(snapshot) : ''
+  })
+
+  const saveStateText = createMemo(() => currentSnapshot() === savedSnapshot() ? 'Saved' : 'Unsaved changes')
 
   function cloneWithFreshIds(node: any): any {
     const clonedChildren: Record<string, any[]> = {}
@@ -609,7 +627,7 @@ const App: Component = () => {
 
   createEffect(() => {
     const snapshot = serializeSubtree(model.rootId)
-    if (snapshot) writeStoredProgram(snapshot)
+    if (snapshot) writeStoredProgram(AUTOSAVE_STORAGE_KEY, snapshot)
   })
 
   function onKeyDown(e: KeyboardEvent) {
@@ -673,6 +691,7 @@ const App: Component = () => {
     <div class="app">
       <header class="toolbar">
         <span class="app-title">Projed</span>
+        <span class={`toolbar-save-state ${currentSnapshot() === savedSnapshot() ? 'is-saved' : 'is-dirty'}`}>{saveStateText()}</span>
         <button class="toolbar-btn" onClick={saveProgram}>Save</button>
         <button class="toolbar-btn" onClick={loadProgram}>Load</button>
         <button class="toolbar-btn" onClick={loadBaseExample}>Base Example</button>

@@ -52,7 +52,27 @@ body {
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 0.05em;
-  margin-right: auto;
+}
+
+.toolbar-save-state {
+  margin-left: auto;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.toolbar-save-state.is-saved {
+  color: var(--prop);
+  border-color: color-mix(in srgb, var(--prop) 45%, var(--border));
+}
+
+.toolbar-save-state.is-dirty {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 
 .toolbar-btn {
