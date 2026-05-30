@@ -24,10 +24,11 @@ const Sidebar: Component<Props> = (props) => {
               <Row label="Kind" value={n().kind} />
             </Section>
 
-            <Show when={n().analysis?.declaredType || n().analysis?.inferredType}>
+            <Show when={n().analysis?.declaredType || n().analysis?.inferredType || n().analysis?.expectedType}>
               <Section title="Types">
                 <Row label="Declared" value={n().analysis?.declaredType ?? '—'} />
                 <Row label="Inferred" value={n().analysis?.inferredType ?? '—'} />
+                <Row label="Expected" value={n().analysis?.expectedType ?? '—'} />
               </Section>
             </Show>
 

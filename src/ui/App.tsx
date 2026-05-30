@@ -1,5 +1,5 @@
 import { Component, createMemo, createSignal, Show, onMount, onCleanup } from 'solid-js'
-import { createIrModel } from '../ir/model'
+import { createIrModel, filterKindsForInsert, getExpectedChildType } from '../ir/model'
 import { runIrProgram } from '../ir/interpreter'
 import NodeRenderer from './NodeRenderer'
 import Sidebar from './Sidebar'
@@ -278,6 +278,13 @@ const App: Component = () => {
   const [clipboardNode, setClipboardNode] = createSignal<any | null>(null)
   const [outputText, setOutputText] = createSignal('')
 
+  function makeInsertContext(parentId: string, role: string, index: number, allowedKinds: string[]): InsertContext | null {
+    const expectedType = getExpectedChildType(model, parentId, role, index)
+    const filteredKinds = filterKindsForInsert(allowedKinds, expectedType)
+    if (!filteredKinds.length) return null
+    return { parentId, role, index, allowedKinds: filteredKinds, expectedType }
+  }
+
   function serializeSubtree(nodeId: string): any | null {
     const node = model.nodes[nodeId]
     if (!node) return null
@@ -425,7 +432,9 @@ const App: Component = () => {
       const parent = model.nodes[slot.parentId]
       if (!parent) return
       const index = (parent.children[slot.role] ?? []).length
-      setInsertCtx({ parentId: slot.parentId, role: slot.role, index, allowedKinds: allowed })
+      const ctx = makeInsertContext(slot.parentId, slot.role, index, allowed)
+      if (!ctx) return
+      setInsertCtx(ctx)
       setInsertInitialQuery(ch)
       return
     }
@@ -434,7 +443,9 @@ const App: Component = () => {
     const allowed = ROLE_ALLOWED_KINDS[ctx.role] ?? []
     if (!allowed.length) return
     const index = above ? ctx.index : ctx.index + 1
-    setInsertCtx({ parentId: ctx.parentId, role: ctx.role, index, allowedKinds: allowed })
+    const insertCtx = makeInsertContext(ctx.parentId, ctx.role, index, allowed)
+    if (!insertCtx) return
+    setInsertCtx(insertCtx)
     setInsertInitialQuery(ch)
   }
 
@@ -447,7 +458,9 @@ const App: Component = () => {
     for (const [role, allowed] of Object.entries(slots)) {
       if (allowed.length > 0) {
         const index = (node.children[role] ?? []).length
-        setInsertCtx({ parentId: nodeId, role, index, allowedKinds: allowed })
+        const ctx = makeInsertContext(nodeId, role, index, allowed)
+        if (!ctx) continue
+        setInsertCtx(ctx)
         setInsertInitialQuery('')
         return
       }
@@ -494,7 +507,9 @@ const App: Component = () => {
       const parent = model.nodes[slot.parentId]
       if (!parent) return
       const index = (parent.children[slot.role] ?? []).length
-      setInsertCtx({ parentId: slot.parentId, role: slot.role, index, allowedKinds: allowed })
+      const ctx = makeInsertContext(slot.parentId, slot.role, index, allowed)
+      if (!ctx) return
+      setInsertCtx(ctx)
       setInsertInitialQuery('')
       return
     }
@@ -557,6 +572,20 @@ const App: Component = () => {
   }
 
   function runProgram() {
+    const errorDiagnostics = Object.values(model.nodes)
+      .flatMap((node) => (node.analysis?.diagnostics ?? []).map((diag) => ({ node, diag })))
+      .filter(({ diag }) => diag.severity === 'error')
+
+    if (errorDiagnostics.length > 0) {
+      const lines = errorDiagnostics.slice(0, 8).map(({ node, diag }) => {
+        const name = typeof node.props.name === 'string' && node.props.name.trim() ? ` ${node.props.name}` : ''
+        return `${node.kind}${name}: ${diag.message}`
+      })
+      if (errorDiagnostics.length > lines.length) lines.push(`...and ${errorDiagnostics.length - lines.length} more error(s)`)
+      setOutputText(`[typecheck failed]\n${lines.join('\n')}`)
+      return
+    }
+
     try {
       const out = runIrProgram(model)
       setOutputText(out || '<no output>')
@@ -635,7 +664,10 @@ const App: Component = () => {
         <Sidebar model={model} onCommand={applyCommand} />
       </div>
       <div class="output-panel">
-        <div class="output-title">Output</div>
+        <div class="output-header">
+          <div class="output-title">Output</div>
+          <button class="toolbar-btn" onClick={() => setOutputText('')}>Clear</button>
+        </div>
         <pre class="output-content">{outputText()}</pre>
       </div>
       <div class="status-bar">{statusText()}</div>

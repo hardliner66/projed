@@ -587,6 +587,13 @@ body {
   gap: 6px;
 }
 
+.output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .output-title {
   font-size: 11px;
   color: var(--fg-dim);

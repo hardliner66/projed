@@ -6,6 +6,7 @@ export interface InsertContext {
   role: string
   index: number
   allowedKinds: string[]
+  expectedType?: string | null
 }
 
 interface Props {
@@ -86,6 +87,9 @@ const InsertMenu: Component<Props> = (props) => {
       <div class="insert-menu" onClick={e => e.stopPropagation()}>
         <div class="insert-header">
           Insert into <span class="insert-role">{props.context.role}</span>
+          <Show when={props.context.expectedType && props.context.expectedType !== 'Any'}>
+            <span class="insert-expected">expects {props.context.expectedType}</span>
+          </Show>
         </div>
         <input
           ref={inputRef}

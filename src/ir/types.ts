@@ -8,6 +8,8 @@ export type Value = string | number | boolean | null
 export interface NodeAnalysis {
   declaredType?: string
   inferredType?: string
+  expectedType?: string
+  expectedChildTypes?: Record<RoleId, string[]>
   diagnostics?: Diagnostic[]
 }
 
