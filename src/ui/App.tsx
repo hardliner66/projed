@@ -6,7 +6,7 @@ import Sidebar from './Sidebar'
 import ProjectionEditor from './ProjectionEditor'
 import InsertMenu, { type InsertContext } from './InsertMenu'
 import { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp } from '../editor/state'
-import { buildNavOrder, getParentContext } from '../editor/navigation'
+import { buildNavOrder, getParentContext, type ParentContext } from '../editor/navigation'
 import { ROLE_ALLOWED_KINDS, CONCEPT_CHILD_SLOTS, makeNode, genId } from '../editor/concepts'
 
 const AUTOSAVE_STORAGE_KEY = 'projed.program.autosave.v1'
@@ -359,6 +359,17 @@ const App: Component = () => {
     return { parentId: rest.slice(0, colonIdx), role: rest.slice(colonIdx + 1) }
   }
 
+  function getSiblingsOfCurrentNode(): { siblings: string[]; ctx: ParentContext } | null {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return null
+    const slot = parseSlotId(nodeId)
+    if (slot) return null
+    const ctx = getParentContext(model, nodeId)
+    if (!ctx) return null
+    const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
+    return { siblings, ctx }
+  }
+
   // ── Navigation ──────────────────────────────────────────────────────────────
 
   function selectNode(nodeId: string | null) {
@@ -397,9 +408,9 @@ const App: Component = () => {
     if (!nodeId || nodeId === model.rootId) return
     const slot = parseSlotId(nodeId)
     if (slot) { selectNode(slot.parentId); return }
-    const ctx = getParentContext(model, nodeId)
-    if (!ctx) return
-    const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
+    const result = getSiblingsOfCurrentNode()
+    if (!result) return
+    const { siblings, ctx } = result
     if (ctx.index > 0) selectNode(siblings[ctx.index - 1])
     else selectNode(ctx.parentId)
   }
@@ -418,39 +429,34 @@ const App: Component = () => {
   function selectNextSiblingOrChild() {
     const nodeId = selectedNodeId()
     if (!nodeId) return
-    if (!parseSlotId(nodeId)) {
-      const ctx = getParentContext(model, nodeId)
-      if (ctx) {
-        const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
-        if (ctx.index < siblings.length - 1) { selectNode(siblings[ctx.index + 1]); return }
-      }
+    const result = getSiblingsOfCurrentNode()
+    if (result && result.ctx.index < result.siblings.length - 1) {
+      selectNode(result.siblings[result.ctx.index + 1])
+      return
     }
     selectFirstChild()
   }
 
   function selectFirstSibling() {
-    const nodeId = selectedNodeId()
-    if (!nodeId || nodeId === model.rootId) return
-    const slot = parseSlotId(nodeId)
-    if (slot) return
-    const ctx = getParentContext(model, nodeId)
-    if (!ctx) return
-    const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
-    if (siblings.length > 0) selectNode(siblings[0])
+    const result = getSiblingsOfCurrentNode()
+    if (result && result.siblings.length > 0) selectNode(result.siblings[0])
   }
 
   function selectLastSibling() {
-    const nodeId = selectedNodeId()
-    if (!nodeId || nodeId === model.rootId) return
-    const slot = parseSlotId(nodeId)
-    if (slot) return
-    const ctx = getParentContext(model, nodeId)
-    if (!ctx) return
-    const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
-    if (siblings.length > 0) selectNode(siblings[siblings.length - 1])
+    const result = getSiblingsOfCurrentNode()
+    if (result && result.siblings.length > 0) selectNode(result.siblings[result.siblings.length - 1])
   }
 
   // ── Insert helpers ───────────────────────────────────────────────────────────
+
+  function makeInsertContextFromSlot(slot: { parentId: string; role: string }): InsertContext | null {
+    const allowed = ROLE_ALLOWED_KINDS[slot.role] ?? []
+    if (!allowed.length) return null
+    const parent = model.nodes[slot.parentId]
+    if (!parent) return null
+    const index = (parent.children[slot.role] ?? []).length
+    return makeInsertContext(slot.parentId, slot.role, index, allowed)
+  }
 
   function openInsertSibling(ch: string, above = false) {
     const nodeId = selectedNodeId()
@@ -458,12 +464,7 @@ const App: Component = () => {
     // placeholder slot: both i and a fill the slot
     const slot = parseSlotId(nodeId)
     if (slot) {
-      const allowed = ROLE_ALLOWED_KINDS[slot.role] ?? []
-      if (!allowed.length) return
-      const parent = model.nodes[slot.parentId]
-      if (!parent) return
-      const index = (parent.children[slot.role] ?? []).length
-      const ctx = makeInsertContext(slot.parentId, slot.role, index, allowed)
+      const ctx = makeInsertContextFromSlot(slot)
       if (!ctx) return
       setInsertCtx(ctx)
       setInsertInitialQuery(ch)
@@ -520,10 +521,7 @@ const App: Component = () => {
     if (!ctx) return
     const siblings = model.nodes[ctx.parentId]?.children[ctx.role] ?? []
     const idx = siblings.indexOf(nodeId)
-    let nextSelected: string | null
-    if (idx + 1 < siblings.length) nextSelected = siblings[idx + 1]
-    else if (idx > 0) nextSelected = siblings[idx - 1]
-    else nextSelected = ctx.parentId
+    const nextSelected = idx + 1 < siblings.length ? siblings[idx + 1] : idx > 0 ? siblings[idx - 1] : ctx.parentId
     applyCommand({ type: 'DELETE_NODE', nodeId, parentId: ctx.parentId, role: ctx.role })
     selectNode(nextSelected)
   }
@@ -533,12 +531,7 @@ const App: Component = () => {
     if (!nodeId) return
     const slot = parseSlotId(nodeId)
     if (slot) {
-      const allowed = ROLE_ALLOWED_KINDS[slot.role] ?? []
-      if (!allowed.length) return
-      const parent = model.nodes[slot.parentId]
-      if (!parent) return
-      const index = (parent.children[slot.role] ?? []).length
-      const ctx = makeInsertContext(slot.parentId, slot.role, index, allowed)
+      const ctx = makeInsertContextFromSlot(slot)
       if (!ctx) return
       setInsertCtx(ctx)
       setInsertInitialQuery('')
