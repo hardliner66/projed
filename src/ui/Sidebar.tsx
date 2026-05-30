@@ -1,20 +1,6 @@
 import { Component, For, Show, createMemo } from 'solid-js'
 import type { IrModel, EditCommand } from '../ir/types'
-import type { CellDef } from '../projection/types'
-import { getProjections } from '../projection/registry'
 import { selectedNodeId, setSelectedNodeId, setEditingNodeProp } from '../editor/state'
-
-/** Collect all prop names referenced anywhere in a CellDef tree. */
-function collectPropNames(cells: CellDef[]): Set<string> {
-  const result = new Set<string>()
-  function walk(cell: CellDef) {
-    if (cell.type === 'prop') { result.add(cell.name); return }
-    if (cell.type === 'block' || cell.type === 'indent') cell.children.forEach(walk)
-    if (cell.type === 'childList' && cell.separator) walk(cell.separator)
-  }
-  cells.forEach(walk)
-  return result
-}
 
 interface Props {
   model: IrModel
@@ -25,31 +11,6 @@ const Sidebar: Component<Props> = (props) => {
   const node = createMemo(() => {
     const id = selectedNodeId()
     return id ? props.model.nodes[id] : null
-  })
-
-  // Always subscribe to getProjections() regardless of node, so any projection
-  // change (including rule removal) immediately invalidates the derived memos.
-  const projectedPropNames = createMemo(() => {
-    const projections = getProjections()  // subscribe to projection changes unconditionally
-    const n = node()
-    if (!n) return new Set<string>()
-    const cells = projections[n.kind]
-    return cells ? collectPropNames(cells) : new Set<string>()
-  })
-
-  const hasRule = createMemo(() => {
-    const n = node()
-    if (!n) return false
-    return n.kind in getProjections()
-  })
-
-  const propsToShow = createMemo(() => {
-    const n = node()
-    if (!n) return [] as [string, unknown][]
-    const allProps = Object.entries(n.props)
-    if (!hasRule()) return allProps                                       // no rule → show everything
-    const mapped = projectedPropNames()
-    return allProps.filter(([k]) => !mapped.has(k))                      // partial rule → only unmapped
   })
 
   return (
@@ -79,12 +40,12 @@ const Sidebar: Component<Props> = (props) => {
               </Section>
             </Show>
 
-            <Show when={propsToShow().length > 0}>
-              <Section title={hasRule() ? 'Unmapped Properties' : 'Properties'}>
+            <Show when={Object.keys(n().props).length > 0}>
+              <Section title="Properties">
                 <div class="props-grid">
                   <div class="props-grid-header">Property</div>
                   <div class="props-grid-header">Value</div>
-                  <For each={propsToShow()}>
+                  <For each={Object.entries(n().props)}>
                     {([key, val]) => (
                       <>
                         <div class="props-grid-key">{key}</div>
