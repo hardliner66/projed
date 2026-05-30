@@ -1,4 +1,4 @@
-import { Component, createMemo, createSignal, Show, onMount, onCleanup } from 'solid-js'
+import { Component, createEffect, createMemo, createSignal, Show, onMount, onCleanup } from 'solid-js'
 import { createIrModel, filterKindsForInsert, getExpectedChildType } from '../ir/model'
 import { runIrProgram } from '../ir/interpreter'
 import NodeRenderer from './NodeRenderer'
@@ -9,7 +9,9 @@ import { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp 
 import { buildNavOrder, getParentContext } from '../editor/navigation'
 import { ROLE_ALLOWED_KINDS, CONCEPT_CHILD_SLOTS, makeNode, genId } from '../editor/concepts'
 
-const initialAst = {
+const PROGRAM_STORAGE_KEY = 'projed.program.v1'
+
+const baseExampleAst = {
   id: 'file-1',
   kind: 'File',
   props: {},
@@ -57,6 +59,24 @@ const initialAst = {
               },
             },
             {
+              id: 'stmt-message',
+              kind: 'LetStmt',
+              props: { name: 'message', type: 'String' },
+              children: {
+                value: [
+                  {
+                    id: 'expr-greeting',
+                    kind: 'BinaryExpr',
+                    props: { op: '+' },
+                    children: {
+                      left: [{ id: 'lit-hello', kind: 'LiteralExpr', props: { value: '"Hello, "' }, children: {} }],
+                      right: [{ id: 'id-who', kind: 'IdentifierExpr', props: { name: 'who' }, children: {} }],
+                    },
+                  },
+                ],
+              },
+            },
+            {
               id: 'stmt-negative',
               kind: 'ExprStmt',
               props: {},
@@ -84,7 +104,7 @@ const initialAst = {
                     kind: 'MemberExpr',
                     props: { member: 'length' },
                     children: {
-                      object: [{ id: 'id-message-member', kind: 'IdentifierExpr', props: { name: 'message' }, children: {} }],
+                      object: [{ id: 'id-numbers-member', kind: 'IdentifierExpr', props: { name: 'numbers' }, children: {} }],
                     },
                   },
                 ],
@@ -128,61 +148,22 @@ const initialAst = {
                       ],
                     },
                   },
-                  { id: 'stmt-continue', kind: 'ContinueStmt', props: {}, children: {} },
                 ],
               },
             },
             {
-              id: 'stmt-message',
-              kind: 'LetStmt',
-              props: { name: 'message', type: 'String' },
-              children: {
-                value: [
-                  {
-                    id: 'expr-greeting',
-                    kind: 'BinaryExpr',
-                    props: { op: '+' },
-                    children: {
-                      left: [{ id: 'lit-hello', kind: 'LiteralExpr', props: { value: '"Hello, "' }, children: {} }],
-                      right: [{ id: 'id-who', kind: 'IdentifierExpr', props: { name: 'who' }, children: {} }],
-                    },
-                  },
-                ],
-              },
-            },
-            {
-              id: 'stmt-if',
-              kind: 'IfStmt',
+              id: 'stmt-call-print',
+              kind: 'ExprStmt',
               props: {},
               children: {
-                condition: [{ id: 'id-who-cond', kind: 'IdentifierExpr', props: { name: 'who' }, children: {} }],
-                thenBody: [
+                expr: [
                   {
-                    id: 'stmt-call-print',
-                    kind: 'ExprStmt',
+                    id: 'call-print-message',
+                    kind: 'CallExpr',
                     props: {},
                     children: {
-                      expr: [
-                        {
-                          id: 'call-print',
-                          kind: 'CallExpr',
-                          props: {},
-                          children: {
-                            callee: [{ id: 'id-print', kind: 'IdentifierExpr', props: { name: 'print' }, children: {} }],
-                            args: [{ id: 'id-message', kind: 'IdentifierExpr', props: { name: 'message' }, children: {} }],
-                          },
-                        },
-                      ],
-                    },
-                  },
-                ],
-                elseBody: [
-                  {
-                    id: 'stmt-return-fallback',
-                    kind: 'ReturnStmt',
-                    props: {},
-                    children: {
-                      value: [{ id: 'lit-fallback', kind: 'LiteralExpr', props: { value: '"Hello"' }, children: {} }],
+                      callee: [{ id: 'id-print', kind: 'IdentifierExpr', props: { name: 'print' }, children: {} }],
+                      args: [{ id: 'id-message', kind: 'IdentifierExpr', props: { name: 'message' }, children: {} }],
                     },
                   },
                 ],
@@ -253,26 +234,34 @@ const initialAst = {
           value: [{ id: 'lit-version', kind: 'LiteralExpr', props: { value: '1' }, children: {} }],
         },
       },
-      {
-        id: 'fn-range',
-        kind: 'FnDecl',
-        props: { name: 'range', returnType: 'Iterator<Number>' },
-        children: {
-          params: [
-            { id: 'param-start', kind: 'Parameter', props: { name: 'start', type: 'Number' }, children: {} },
-            { id: 'param-end', kind: 'Parameter', props: { name: 'end', type: 'Number' }, children: {} },
-          ],
-          body: [
-            { id: 'stmt-break', kind: 'BreakStmt', props: {}, children: {} },
-          ],
-        },
-      },
     ],
   },
 }
 
+function cloneAst<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+function readStoredProgram(): any | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(PROGRAM_STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function writeStoredProgram(program: any) {
+  try {
+    globalThis.localStorage?.setItem(PROGRAM_STORAGE_KEY, JSON.stringify(program))
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 const App: Component = () => {
-  const { model, applyCommand, undo, redo } = createIrModel(initialAst)
+  const { model, applyCommand, undo, redo, replaceModel } = createIrModel(readStoredProgram() ?? cloneAst(baseExampleAst))
   const [insertCtx, setInsertCtx] = createSignal<InsertContext | null>(null)
   const [insertInitialQuery, setInsertInitialQuery] = createSignal('')
   const [clipboardNode, setClipboardNode] = createSignal<any | null>(null)
@@ -299,6 +288,30 @@ const App: Component = () => {
       children,
       refs: {},
     }
+  }
+
+  function saveProgram() {
+    const snapshot = serializeSubtree(model.rootId)
+    if (!snapshot) return
+    writeStoredProgram(snapshot)
+    setOutputText('[saved] current program stored in browser localStorage')
+  }
+
+  function loadProgram() {
+    const snapshot = readStoredProgram()
+    if (!snapshot) {
+      setOutputText('[load failed] no saved program found in browser localStorage')
+      return
+    }
+    replaceModel(snapshot)
+    selectNode(null)
+    setOutputText('[loaded] restored program from browser localStorage')
+  }
+
+  function loadBaseExample() {
+    replaceModel(cloneAst(baseExampleAst))
+    selectNode(null)
+    setOutputText('[loaded] base example restored')
   }
 
   function cloneWithFreshIds(node: any): any {
@@ -594,11 +607,17 @@ const App: Component = () => {
     }
   }
 
+  createEffect(() => {
+    const snapshot = serializeSubtree(model.rootId)
+    if (snapshot) writeStoredProgram(snapshot)
+  })
+
   function onKeyDown(e: KeyboardEvent) {
     if (insertCtx()) return
     const withMeta = e.ctrlKey || e.metaKey
     if (withMeta && !e.altKey) {
       const key = e.key.toLowerCase()
+      if (key === 'a' && !isEditingInput()) { e.preventDefault(); selectNode(model.rootId); return }
       if (key === 'c' && !isEditingInput()) { e.preventDefault(); copySelected(); return }
       if (key === 'x' && !isEditingInput()) { e.preventDefault(); cutSelected(); return }
       if (key === 'v' && !isEditingInput()) { e.preventDefault(); pasteClipboard(); return }
@@ -647,13 +666,16 @@ const App: Component = () => {
     if (!sel) return 'Click or hjkl/↑↓←→ to select a node'
     if (sel === model.rootId) return 'hjkl navigate'
     if (parseSlotId(sel)) return 'e / i / a fill slot · Esc deselect'
-    return 'hjkl/↑↓←→ navigate · 0/$ first/last sibling · e edit · i before · a after · I insert child · Del delete · Ctrl+C/X/V · Ctrl+Z/Y'
+    return 'hjkl/↑↓←→ navigate · 0/$ first/last sibling · e edit · i before · a after · I insert child · Del delete · Ctrl+A/C/X/V · Ctrl+Z/Y'
   })
 
   return (
     <div class="app">
       <header class="toolbar">
         <span class="app-title">Projed</span>
+        <button class="toolbar-btn" onClick={saveProgram}>Save</button>
+        <button class="toolbar-btn" onClick={loadProgram}>Load</button>
+        <button class="toolbar-btn" onClick={loadBaseExample}>Base Example</button>
         <button class="toolbar-btn" onClick={runProgram}>Run</button>
         <ProjectionEditor model={model} />
       </header>

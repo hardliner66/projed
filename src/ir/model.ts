@@ -728,5 +728,15 @@ export function createIrModel(initialRoot: any) {
     return true
   }
 
-  return { model, applyCommand, undo, redo }
+  function replaceModel(nextRoot: any) {
+    const nextNodes: Record<NodeId, IrNode> = {}
+    const nextSeed = seedModel(nextRoot, nextNodes)
+    const nextModel: IrModel = { nodes: nextNodes, rootId: nextSeed.id }
+    resolveModel(nextModel)
+    past.length = 0
+    future.length = 0
+    setModel(reconcile(nextModel))
+  }
+
+  return { model, applyCommand, undo, redo, replaceModel }
 }
