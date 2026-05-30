@@ -1,12 +1,13 @@
 import { Component, createMemo, createSignal, Show, onMount, onCleanup } from 'solid-js'
 import { createIrModel } from '../ir/model'
+import { runIrProgram } from '../ir/interpreter'
 import NodeRenderer from './NodeRenderer'
 import Sidebar from './Sidebar'
 import ProjectionEditor from './ProjectionEditor'
 import InsertMenu, { type InsertContext } from './InsertMenu'
 import { selectedNodeId, setSelectedNodeId, editingNodeProp, setEditingNodeProp } from '../editor/state'
 import { buildNavOrder, getParentContext } from '../editor/navigation'
-import { ROLE_ALLOWED_KINDS, CONCEPT_CHILD_SLOTS, makeNode } from '../editor/concepts'
+import { ROLE_ALLOWED_KINDS, CONCEPT_CHILD_SLOTS, makeNode, genId } from '../editor/concepts'
 
 const initialAst = {
   id: 'file-1',
@@ -199,6 +200,52 @@ const initialAst = {
         },
       },
       {
+        id: 'fn-main',
+        kind: 'FnDecl',
+        props: { name: 'main', returnType: 'Unit' },
+        children: {
+          params: [],
+          body: [
+            {
+              id: 'stmt-main-greeting',
+              kind: 'LetStmt',
+              props: { name: 'greeting', type: 'String' },
+              children: {
+                value: [
+                  {
+                    id: 'call-main-greet',
+                    kind: 'CallExpr',
+                    props: {},
+                    children: {
+                      callee: [{ id: 'id-main-greet', kind: 'IdentifierExpr', props: { name: 'greet' }, children: {} }],
+                      args: [{ id: 'lit-main-who', kind: 'LiteralExpr', props: { value: '"World"' }, children: {} }],
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              id: 'stmt-main-print',
+              kind: 'ExprStmt',
+              props: {},
+              children: {
+                expr: [
+                  {
+                    id: 'call-main-print',
+                    kind: 'CallExpr',
+                    props: {},
+                    children: {
+                      callee: [{ id: 'id-main-print', kind: 'IdentifierExpr', props: { name: 'print' }, children: {} }],
+                      args: [{ id: 'id-main-greeting', kind: 'IdentifierExpr', props: { name: 'greeting' }, children: {} }],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      {
         id: 'let-version',
         kind: 'LetDecl',
         props: { name: 'version', type: 'Number' },
@@ -225,9 +272,41 @@ const initialAst = {
 }
 
 const App: Component = () => {
-  const { model, applyCommand } = createIrModel(initialAst)
+  const { model, applyCommand, undo, redo } = createIrModel(initialAst)
   const [insertCtx, setInsertCtx] = createSignal<InsertContext | null>(null)
   const [insertInitialQuery, setInsertInitialQuery] = createSignal('')
+  const [clipboardNode, setClipboardNode] = createSignal<any | null>(null)
+  const [outputText, setOutputText] = createSignal('')
+
+  function serializeSubtree(nodeId: string): any | null {
+    const node = model.nodes[nodeId]
+    if (!node) return null
+    const children: Record<string, any[]> = {}
+    for (const [role, ids] of Object.entries(node.children)) {
+      children[role] = ids.map((id) => serializeSubtree(id)).filter(Boolean) as any[]
+    }
+    return {
+      id: node.id,
+      kind: node.kind,
+      props: { ...node.props },
+      children,
+      refs: {},
+    }
+  }
+
+  function cloneWithFreshIds(node: any): any {
+    const clonedChildren: Record<string, any[]> = {}
+    for (const [role, kids] of Object.entries<any[]>(node.children ?? {})) {
+      clonedChildren[role] = kids.map((kid) => cloneWithFreshIds(kid))
+    }
+    return {
+      ...node,
+      id: genId(String(node.kind ?? 'node').toLowerCase()),
+      children: clonedChildren,
+      refs: {},
+      analysis: undefined,
+    }
+  }
 
   function isEditingInput() {
     const el = document.activeElement
@@ -343,8 +422,78 @@ const App: Component = () => {
     if (firstProp) setEditingNodeProp({ nodeId, propName: firstProp })
   }
 
+  function copySelected() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const subtree = serializeSubtree(nodeId)
+    if (subtree) setClipboardNode(subtree)
+  }
+
+  function cutSelected() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    copySelected()
+    deleteSelected()
+  }
+
+  function pasteClipboard() {
+    const clip = clipboardNode()
+    if (!clip) return
+
+    const selected = selectedNodeId()
+    if (selected && selected !== model.rootId) {
+      const ctx = getParentContext(model, selected)
+      if (!ctx) return
+      const allowed = ROLE_ALLOWED_KINDS[ctx.role] ?? []
+      if (!allowed.includes(clip.kind)) return
+      const child = cloneWithFreshIds(clip)
+      applyCommand({
+        type: 'INSERT_CHILD',
+        parentId: ctx.parentId,
+        role: ctx.role,
+        child,
+        index: ctx.index + 1,
+      })
+      selectNode(child.id)
+      return
+    }
+
+    const root = model.nodes[model.rootId]
+    const role = 'declarations'
+    const allowed = ROLE_ALLOWED_KINDS[role] ?? []
+    if (!root || !allowed.includes(clip.kind)) return
+    const child = cloneWithFreshIds(clip)
+    const index = (root.children[role] ?? []).length
+    applyCommand({
+      type: 'INSERT_CHILD',
+      parentId: model.rootId,
+      role,
+      child,
+      index,
+    })
+    selectNode(child.id)
+  }
+
+  function runProgram() {
+    try {
+      const out = runIrProgram(model)
+      setOutputText(out || '<no output>')
+    } catch (e) {
+      setOutputText(`[runtime error] ${String(e)}`)
+    }
+  }
+
   function onKeyDown(e: KeyboardEvent) {
     if (insertCtx()) return
+    const withMeta = e.ctrlKey || e.metaKey
+    if (withMeta && !e.altKey) {
+      const key = e.key.toLowerCase()
+      if (key === 'c' && !isEditingInput()) { e.preventDefault(); copySelected(); return }
+      if (key === 'x' && !isEditingInput()) { e.preventDefault(); cutSelected(); return }
+      if (key === 'v' && !isEditingInput()) { e.preventDefault(); pasteClipboard(); return }
+      if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return }
+      if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return }
+    }
     if (isEditingInput()) return
     if (e.ctrlKey || e.metaKey || e.altKey) return
     switch (e.key) {
@@ -382,13 +531,14 @@ const App: Component = () => {
     const sel = selectedNodeId()
     if (!sel) return 'Click or hjkl/↑↓←→ to select a node'
     if (sel === model.rootId) return 'hjkl navigate'
-    return 'hjkl/↑↓←→ navigate · e edit · i insert child · o sibling below · O sibling above · Del delete'
+    return 'hjkl/↑↓←→ navigate · e edit · i insert child · o sibling below · O sibling above · Del delete · Ctrl+C/X/V · Ctrl+Z/Y'
   })
 
   return (
     <div class="app">
       <header class="toolbar">
         <span class="app-title">Projed</span>
+        <button class="toolbar-btn" onClick={runProgram}>Run</button>
         <ProjectionEditor model={model} />
       </header>
       <div class="workspace">
@@ -396,6 +546,10 @@ const App: Component = () => {
           <NodeRenderer nodeId={model.rootId} model={model} onCommand={applyCommand} />
         </main>
         <Sidebar model={model} onCommand={applyCommand} />
+      </div>
+      <div class="output-panel">
+        <div class="output-title">Output</div>
+        <pre class="output-content">{outputText()}</pre>
       </div>
       <div class="status-bar">{statusText()}</div>
       <Show when={insertCtx()}>

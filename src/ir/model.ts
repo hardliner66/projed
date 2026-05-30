@@ -1,4 +1,4 @@
-import { createStore, produce } from 'solid-js/store'
+import { createStore, produce, reconcile } from 'solid-js/store'
 import type { Diagnostic, IrModel, IrNode, NodeId, EditCommand } from './types'
 
 interface Scope {
@@ -338,8 +338,20 @@ export function createIrModel(initialRoot: any) {
   resolveModel({ nodes, rootId: root.id })
 
   const [model, setModel] = createStore<IrModel>({ nodes, rootId: root.id })
+  const past: IrModel[] = []
+  const future: IrModel[] = []
+
+  function cloneModelSnapshot(source: IrModel): IrModel {
+    return JSON.parse(JSON.stringify(source)) as IrModel
+  }
+
+  function takeSnapshot(): IrModel {
+    return cloneModelSnapshot({ nodes: model.nodes as unknown as Record<NodeId, IrNode>, rootId: model.rootId })
+  }
 
   function applyCommand(cmd: EditCommand) {
+    past.push(takeSnapshot())
+    future.length = 0
     setModel(produce((m) => {
       switch (cmd.type) {
         case 'SET_PROP':
@@ -392,5 +404,21 @@ export function createIrModel(initialRoot: any) {
     }))
   }
 
-  return { model, applyCommand }
+  function undo(): boolean {
+    const prev = past.pop()
+    if (!prev) return false
+    future.push(takeSnapshot())
+    setModel(reconcile(prev))
+    return true
+  }
+
+  function redo(): boolean {
+    const next = future.pop()
+    if (!next) return false
+    past.push(takeSnapshot())
+    setModel(reconcile(next))
+    return true
+  }
+
+  return { model, applyCommand, undo, redo }
 }
