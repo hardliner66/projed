@@ -723,7 +723,21 @@ const App: Component = () => {
         <main class="editor-surface" onClick={() => selectNode(null)}>
           <NodeRenderer nodeId={model.rootId} model={model} onCommand={applyCommand} />
         </main>
-        <Sidebar model={model} onCommand={applyCommand} />
+        <Sidebar
+            model={model}
+            onCommand={applyCommand}
+            onSelect={(nodeId) => selectNode(nodeId)}
+            onRequestInsert={(parentId, role, index) => {
+              const parent = model.nodes[parentId]
+              if (!parent) return
+              const allowed = ROLE_ALLOWED_KINDS[role] ?? CONCEPT_CHILD_SLOTS[parent.kind]?.[role] ?? []
+              if (!allowed.length) return
+              const ctx = makeInsertContext(parentId, role, index, allowed)
+              if (!ctx) return
+              setInsertCtx(ctx)
+              setInsertInitialQuery('')
+            }}
+          />
       </div>
       <div class="output-panel">
         <div class="output-header">
