@@ -181,6 +181,20 @@ function setExpectedChildType(node: IrNode, role: string, index: number, expecte
 function builtinSignature(name: string): CallSignature | null {
   if (name === 'print') return { returnType: 'Unit', paramTypes: ['Any'], variadic: true }
   if (name === 'range') return { returnType: 'Iterator<Number>', paramTypes: ['Number', 'Number'] }
+  if (name === 'len') return { returnType: 'Number', paramTypes: ['Any'] }
+  if (name === 'push') return { returnType: 'Array<Any>', paramTypes: ['Array<Any>', 'Any'] }
+  if (name === 'pop') return { returnType: 'Any', paramTypes: ['Array<Any>'] }
+  if (name === 'slice') return { returnType: 'Array<Any>', paramTypes: ['Array<Any>', 'Number', 'Number'], variadic: false }
+  if (name === 'append') return { returnType: 'Array<Any>', paramTypes: ['Array<Any>', 'Any'] }
+  if (name === 'str') return { returnType: 'String', paramTypes: ['Any'] }
+  if (name === 'num') return { returnType: 'Number', paramTypes: ['Any'] }
+  if (name === 'floor' || name === 'ceil' || name === 'abs' || name === 'sqrt') return { returnType: 'Number', paramTypes: ['Number'] }
+  if (name === 'min' || name === 'max') return { returnType: 'Number', paramTypes: ['Number', 'Number'] }
+  if (name === 'keys') return { returnType: 'Array<String>', paramTypes: ['Any'] }
+  if (name === 'split') return { returnType: 'Array<String>', paramTypes: ['String', 'String'] }
+  if (name === 'join') return { returnType: 'String', paramTypes: ['Array<Any>', 'String'] }
+  if (name === 'type') return { returnType: 'String', paramTypes: ['Any'] }
+  if (name === 'has') return { returnType: 'Bool', paramTypes: ['Any', 'Any'] }
   return null
 }
 
@@ -233,6 +247,8 @@ function mergeReturnTypes(types: string[], fallback: string): string {
 function inferExpectedTypeForKind(kind: string): string {
   switch (kind) {
     case 'ArrayLiteralExpr': return 'Array<Any>'
+    case 'IndexExpr':
+      return 'Any'
     case 'UnaryExpr':
     case 'BinaryExpr':
     case 'LiteralExpr':
@@ -290,6 +306,10 @@ export function getExpectedChildType(model: IrModel, parentId: NodeId, role: str
       return role === 'elements' && parent.analysis?.expectedType ? elementTypeOf(parent.analysis.expectedType) : null
     case 'MemberExpr':
       return role === 'object' && stringProp(parent, 'member') === 'length' ? 'Array<Any>' : null
+    case 'IndexExpr':
+      if (role === 'object') return 'Array<Any>'
+      if (role === 'index') return 'Number'
+      return null
     default:
       return null
   }
@@ -299,6 +319,7 @@ function kindMatchesExpectedType(kind: string, expectedType: string): boolean {
   if (isAnyType(expectedType)) return true
   if (kind === 'IdentifierExpr' || kind === 'CallExpr' || kind === 'AssignExpr' || kind === 'MemberExpr') return true
   if (kind === 'ArrayLiteralExpr') return isArrayType(expectedType) || isIteratorType(expectedType)
+  if (kind === 'IndexExpr') return true
   if (kind === 'UnaryExpr') return expectedType === 'Number' || expectedType === 'Bool'
   if (kind === 'BinaryExpr') return expectedType === 'Number' || expectedType === 'String' || expectedType === 'Bool'
   if (kind === 'LiteralExpr') return !expectedType.startsWith('Fn(')
@@ -557,6 +578,24 @@ function resolveModel(model: IrModel) {
           pushDiagnostic(node, 'warning', 'member access target has unknown type')
         }
         enforceExpectedType(node, expectedType, inferred, 'member expression')
+        return inferred
+      }
+      case 'IndexExpr': {
+        const objectId = firstChildId(node, 'object')
+        const indexId = firstChildId(node, 'index')
+        if (objectId) setExpectedChildType(node, 'object', 0, 'Array<Any>')
+        if (indexId) setExpectedChildType(node, 'index', 0, 'Number')
+        const objectType = objectId ? visit(objectId, scope, 'Array<Any>', returnType) : 'Any'
+        const indexType = indexId ? visit(indexId, scope, 'Number', returnType) : 'Any'
+        const inferred = isArrayType(objectType) ? elementTypeOf(objectType) : 'Any'
+        node.analysis = { inferredType: inferred }
+        if (!isAnyType(indexType) && indexType !== 'Number') {
+          pushDiagnostic(node, 'warning', `index has type ${indexType}, expected Number`)
+        }
+        if (!isAnyType(objectType) && !isArrayType(objectType)) {
+          pushDiagnostic(node, 'warning', `index target has type ${objectType}, expected Array`)
+        }
+        enforceExpectedType(node, expectedType, inferred, 'index expression')
         return inferred
       }
       case 'ArrayLiteralExpr': {

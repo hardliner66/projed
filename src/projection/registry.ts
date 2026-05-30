@@ -261,6 +261,16 @@ const rustProjections: ProjectionMap = {
       ]
     },
   ],
+  IndexExpr: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'child', name: 'object' },
+        { type: 'label', text: '[', style: 'punct' },
+        { type: 'child', name: 'index' },
+        { type: 'label', text: ']', style: 'punct' },
+      ]
+    },
+  ],
 }
 
 // ── Python ───────────────────────────────────────────────────────────────────
@@ -488,6 +498,16 @@ const pythonProjections: ProjectionMap = {
       type: 'block', direction: 'row', children: [
         { type: 'label', text: '[', style: 'punct' },
         { type: 'childList', name: 'elements', inline: true, separator: { type: 'label', text: ', ', style: 'punct' } },
+        { type: 'label', text: ']', style: 'punct' },
+      ]
+    },
+  ],
+  IndexExpr: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'child', name: 'object' },
+        { type: 'label', text: '[', style: 'punct' },
+        { type: 'child', name: 'index' },
         { type: 'label', text: ']', style: 'punct' },
       ]
     },
@@ -742,6 +762,16 @@ const cProjections: ProjectionMap = {
         { type: 'label', text: '{', style: 'punct' },
         { type: 'childList', name: 'elements', inline: true, separator: { type: 'label', text: ', ', style: 'punct' } },
         { type: 'label', text: '}', style: 'punct' },
+      ]
+    },
+  ],
+  IndexExpr: [
+    {
+      type: 'block', direction: 'row', children: [
+        { type: 'child', name: 'object' },
+        { type: 'label', text: '[', style: 'punct' },
+        { type: 'child', name: 'index' },
+        { type: 'label', text: ']', style: 'punct' },
       ]
     },
   ],

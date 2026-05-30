@@ -45,6 +45,14 @@ const PropCell: Component<Props> = (props) => {
             onBlur={(e) => commit(e.currentTarget.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.stopPropagation(); commit(e.currentTarget.value) }
+              if (e.key === 'Tab') {
+                e.preventDefault(); e.stopPropagation()
+                commit(e.currentTarget.value)
+                const keys = Object.keys(props.node.props)
+                const idx = keys.indexOf(props.propName)
+                const next = e.shiftKey ? keys[idx - 1] : keys[idx + 1]
+                if (next) setEditingNodeProp({ nodeId: props.node.id, propName: next })
+              }
               if (e.key === 'Escape') { e.stopPropagation(); cancelEdit() }
             }}
             autofocus

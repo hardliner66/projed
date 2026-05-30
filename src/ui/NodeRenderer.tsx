@@ -17,6 +17,8 @@ const NodeRenderer: Component<Props> = (props) => {
   const node = () => props.model.nodes[props.nodeId]
   const cells = () => (props.projectionMap ?? getProjections())[node()?.kind]
   const isSelected = () => selectedNodeId() === props.nodeId
+  const hasDiagError = () => node()?.analysis?.diagnostics?.some(d => d.severity === 'error') ?? false
+  const hasDiagWarning = () => node()?.analysis?.diagnostics?.some(d => d.severity === 'warning') ?? false
 
   function selectNode(id: string) {
     setEditingNodeProp(null)
@@ -31,7 +33,7 @@ const NodeRenderer: Component<Props> = (props) => {
   return (
     <Show when={node()} fallback={<span class="error">missing:{props.nodeId}</span>}>
       <div
-        class={`node-wrapper ${isSelected() ? 'selected' : ''}`}
+        class={`node-wrapper${isSelected() ? ' selected' : ''}${hasDiagError() ? ' has-error' : hasDiagWarning() ? ' has-warning' : ''}`}
         onClick={handleClick}
       >
         <Show when={cells()} fallback={<FallbackRenderer node={node()} />}>

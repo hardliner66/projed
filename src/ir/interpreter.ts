@@ -125,6 +125,18 @@ export function runIrProgram(model: IrModel): string {
                 if (object && typeof object === 'object' && !Array.isArray(object)) return (object as Record<string, RuntimeValue>)[member] ?? null
                 return null
             }
+            case 'IndexExpr': {
+                const object = evalExpr(firstChild(node, 'object'), env)
+                const idx = evalExpr(firstChild(node, 'index'), env)
+                if (Array.isArray(object)) {
+                    const i = Number(idx ?? 0)
+                    return i >= 0 && i < object.length ? object[i] : null
+                }
+                if (object && typeof object === 'object' && !Array.isArray(object)) {
+                    return (object as Record<string, RuntimeValue>)[String(idx ?? '')] ?? null
+                }
+                return null
+            }
             case 'AssignExpr': {
                 const targetId = firstChild(node, 'target')
                 const value = evalExpr(firstChild(node, 'value'), env)
@@ -152,6 +164,92 @@ export function runIrProgram(model: IrModel): string {
                     const out: RuntimeValue[] = []
                     for (let i = start; i < end; i += 1) out.push(i)
                     return out
+                }
+
+                if (calleeName === 'len') {
+                    const v = argValues[0]
+                    if (Array.isArray(v) || typeof v === 'string') return v.length
+                    return null
+                }
+
+                if (calleeName === 'push') {
+                    const arr = argValues[0]
+                    if (Array.isArray(arr)) { arr.push(argValues[1] ?? null); return arr }
+                    return null
+                }
+
+                if (calleeName === 'pop') {
+                    const arr = argValues[0]
+                    if (Array.isArray(arr) && arr.length > 0) return arr.pop() ?? null
+                    return null
+                }
+
+                if (calleeName === 'slice') {
+                    const arr = argValues[0]
+                    const start = Number(argValues[1] ?? 0)
+                    const end = argValues[2] !== undefined ? Number(argValues[2]) : undefined
+                    if (Array.isArray(arr)) return arr.slice(start, end)
+                    if (typeof arr === 'string') return arr.slice(start, end)
+                    return null
+                }
+
+                if (calleeName === 'append') {
+                    const arr = argValues[0]
+                    if (Array.isArray(arr)) return [...arr, argValues[1] ?? null]
+                    return null
+                }
+
+                if (calleeName === 'str') {
+                    return stringifyValue(argValues[0] ?? null)
+                }
+
+                if (calleeName === 'num') {
+                    const v = argValues[0]
+                    if (typeof v === 'number') return v
+                    if (typeof v === 'string') { const n = Number(v); return isNaN(n) ? null : n }
+                    if (typeof v === 'boolean') return v ? 1 : 0
+                    return null
+                }
+
+                if (calleeName === 'floor') return Math.floor(Number(argValues[0] ?? 0))
+                if (calleeName === 'ceil') return Math.ceil(Number(argValues[0] ?? 0))
+                if (calleeName === 'abs') return Math.abs(Number(argValues[0] ?? 0))
+                if (calleeName === 'sqrt') return Math.sqrt(Number(argValues[0] ?? 0))
+                if (calleeName === 'min') return Math.min(Number(argValues[0] ?? 0), Number(argValues[1] ?? 0))
+                if (calleeName === 'max') return Math.max(Number(argValues[0] ?? 0), Number(argValues[1] ?? 0))
+
+                if (calleeName === 'keys') {
+                    const obj = argValues[0]
+                    if (obj && typeof obj === 'object' && !Array.isArray(obj)) return Object.keys(obj as Record<string, RuntimeValue>)
+                    return []
+                }
+
+                if (calleeName === 'split') {
+                    const s = String(argValues[0] ?? '')
+                    const sep = String(argValues[1] ?? '')
+                    return s.split(sep)
+                }
+
+                if (calleeName === 'join') {
+                    const arr = argValues[0]
+                    const sep = String(argValues[1] ?? '')
+                    if (Array.isArray(arr)) return arr.map(stringifyValue).join(sep)
+                    return String(arr ?? '')
+                }
+
+                if (calleeName === 'type') {
+                    const v = argValues[0]
+                    if (v === null) return 'null'
+                    if (Array.isArray(v)) return 'Array'
+                    return typeof v
+                }
+
+                if (calleeName === 'has') {
+                    const obj = argValues[0]
+                    const key = String(argValues[1] ?? '')
+                    if (Array.isArray(obj)) return obj.some(el => el === argValues[1])
+                    if (obj && typeof obj === 'object') return key in (obj as Record<string, RuntimeValue>)
+                    return false
                 }
 
                 if (calleeName && functions.has(calleeName)) {

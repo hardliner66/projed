@@ -140,6 +140,22 @@ body {
   outline: 1px solid var(--selected-border);
 }
 
+.node-wrapper.has-error {
+  outline: 1px solid color-mix(in srgb, var(--error) 60%, transparent);
+}
+
+.node-wrapper.selected.has-error {
+  outline: 1px solid var(--error);
+}
+
+.node-wrapper.has-warning {
+  outline: 1px solid color-mix(in srgb, var(--keyword) 40%, transparent);
+}
+
+.node-wrapper.selected.has-warning {
+  outline: 1px solid var(--keyword);
+}
+
 /* Cell types */
 .cell-label {
   white-space: pre;

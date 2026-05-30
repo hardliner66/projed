@@ -159,6 +159,13 @@ export const CONCEPTS: Record<string, ConceptDef> = {
     defaultProps: {},
     defaultChildren: { elements: [] },
   },
+  IndexExpr: {
+    kind: 'IndexExpr',
+    label: 'index',
+    aliases: ['subscript', 'at', 'bracket', 'get'],
+    defaultProps: {},
+    defaultChildren: { object: [], index: [] },
+  },
 }
 
 export const ROLE_ALLOWED_KINDS: Record<string, string[]> = {
@@ -166,18 +173,20 @@ export const ROLE_ALLOWED_KINDS: Record<string, string[]> = {
   fields: ['FieldDecl'],
   params: ['Parameter'],
   body: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ForStmt', 'BreakStmt', 'ContinueStmt', 'ReturnStmt'],
-  condition: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
-  expr: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
-  value: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
-  left: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
-  right: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
+  condition: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
+  expr: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
+  value: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
+  left: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
+  right: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
   callee: ['IdentifierExpr', 'CallExpr', 'MemberExpr'],
-  args: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
-  target: ['IdentifierExpr'],
-  iterable: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
-  elements: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'],
-  thenBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
-  elseBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ReturnStmt'],
+  args: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
+  target: ['IdentifierExpr', 'MemberExpr', 'IndexExpr'],
+  iterable: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
+  elements: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
+  thenBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ForStmt', 'BreakStmt', 'ContinueStmt', 'ReturnStmt'],
+  elseBody: ['LetStmt', 'ExprStmt', 'IfStmt', 'WhileStmt', 'ForStmt', 'BreakStmt', 'ContinueStmt', 'ReturnStmt'],
+  object: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
+  index: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr'],
 }
 
 // Child slots per concept kind — used for 'i' (insert child) navigation
@@ -208,6 +217,10 @@ export const CONCEPT_CHILD_SLOTS: Record<string, Record<string, string[]>> = {
   UnaryExpr: { expr: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'] },
   MemberExpr: { object: ['IdentifierExpr', 'MemberExpr', 'CallExpr', 'ArrayLiteralExpr'] },
   ArrayLiteralExpr: { elements: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'AssignExpr', 'UnaryExpr', 'MemberExpr', 'ArrayLiteralExpr'] },
+  IndexExpr: {
+    object: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr', 'ArrayLiteralExpr'],
+    index: ['IdentifierExpr', 'LiteralExpr', 'BinaryExpr', 'CallExpr', 'UnaryExpr', 'MemberExpr', 'IndexExpr'],
+  },
 }
 
 export function makeNode(kind: string): any {

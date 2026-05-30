@@ -448,10 +448,10 @@ const App: Component = () => {
   // ── Insert helpers ───────────────────────────────────────────────────────────
 
   function makeInsertContextFromSlot(slot: { parentId: string; role: string }): InsertContext | null {
-    const allowed = ROLE_ALLOWED_KINDS[slot.role] ?? []
-    if (!allowed.length) return null
     const parent = model.nodes[slot.parentId]
     if (!parent) return null
+    const allowed = ROLE_ALLOWED_KINDS[slot.role] ?? CONCEPT_CHILD_SLOTS[parent.kind]?.[slot.role] ?? []
+    if (!allowed.length) return null
     const index = (parent.children[slot.role] ?? []).length
     return makeInsertContext(slot.parentId, slot.role, index, allowed)
   }
@@ -554,6 +554,34 @@ const App: Component = () => {
     deleteSelected()
   }
 
+  function duplicateSelected() {
+    const nodeId = selectedNodeId()
+    if (!nodeId || nodeId === model.rootId) return
+    const result = getSiblingsOf(nodeId)
+    if (!result) return
+    const subtree = serializeSubtree(nodeId)
+    if (!subtree) return
+    const clone = cloneWithFreshIds(subtree)
+    applyCommand({ type: 'INSERT_CHILD', parentId: result.ctx.parentId, role: result.ctx.role, child: clone, index: result.ctx.index + 1 })
+    selectNode(clone.id)
+  }
+
+  function moveSelectedUp() {
+    const nodeId = selectedNodeId()
+    if (!nodeId) return
+    const result = getSiblingsOf(nodeId)
+    if (!result || result.ctx.index === 0) return
+    applyCommand({ type: 'MOVE_CHILD', parentId: result.ctx.parentId, role: result.ctx.role, fromIndex: result.ctx.index, toIndex: result.ctx.index - 1 })
+  }
+
+  function moveSelectedDown() {
+    const nodeId = selectedNodeId()
+    if (!nodeId) return
+    const result = getSiblingsOf(nodeId)
+    if (!result || result.ctx.index >= result.siblings.length - 1) return
+    applyCommand({ type: 'MOVE_CHILD', parentId: result.ctx.parentId, role: result.ctx.role, fromIndex: result.ctx.index, toIndex: result.ctx.index + 1 })
+  }
+
   function pasteClipboard() {
     const clip = clipboardNode()
     if (!clip) return
@@ -642,6 +670,9 @@ const App: Component = () => {
       case 'ArrowRight': case 'l': e.preventDefault(); selectNextSiblingOrChild(); break
       case '0': case '_': e.preventDefault(); selectFirstSibling(); break
       case '$': e.preventDefault(); selectLastSibling(); break
+      case 'd': e.preventDefault(); duplicateSelected(); break
+      case '[': e.preventDefault(); moveSelectedUp(); break
+      case ']': e.preventDefault(); moveSelectedDown(); break
       // ── Edit ──
       case 'e':
       case 'Enter':
@@ -674,7 +705,7 @@ const App: Component = () => {
     if (!sel) return 'Click or hjkl/↑↓←→ to select a node'
     if (sel === model.rootId) return 'hjkl navigate'
     if (parseSlotId(sel)) return 'e / i / a fill slot · Esc deselect'
-    return 'hjkl/↑↓←→ navigate · 0/$ first/last sibling · e edit · i before · a after · I insert child · Del delete · Ctrl+A/C/X/V · Ctrl+Z/Y'
+    return 'hjkl/↑↓←→ navigate · 0/$ first/last · d dup · [/] move · e edit · i/a insert · I child · Del delete · Ctrl+C/X/V · Ctrl+Z/Y'
   })
 
   return (
