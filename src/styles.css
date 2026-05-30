@@ -935,3 +935,28 @@ body {
   font-style: italic;
   font-size: 13px;
 }
+
+/* Smart / direct-value candidate */
+.insert-smart {
+  border-bottom: 1px solid var(--border);
+}
+
+.insert-smart .smart-value {
+  color: var(--prop);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.insert-smart .smart-desc {
+  margin-left: auto;
+  color: var(--fg-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.insert-smart.focused .smart-value,
+.insert-smart:hover .smart-value {
+  color: var(--accent);
+}

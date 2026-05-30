@@ -500,16 +500,21 @@ const App: Component = () => {
   // kept for the "type any char to insert" fallback
   function openInsert(ch: string) { openInsertSibling(ch, false) }
 
-  function handleInsert(kind: string) {
+  function handleInsert(kind: string, preFill?: Record<string, string>) {
     const ctx = insertCtx()
     if (!ctx) return
     const node = makeNode(kind)
+    if (preFill) {
+      for (const [k, v] of Object.entries(preFill)) node.props[k] = v
+    }
     applyCommand({ type: 'INSERT_CHILD', parentId: ctx.parentId, role: ctx.role, child: node, index: ctx.index })
     setInsertCtx(null)
     setInsertInitialQuery('')
     selectNode(node.id)
-    const firstProp = Object.keys(node.props)[0]
-    if (firstProp) setEditingNodeProp({ nodeId: node.id, propName: firstProp })
+    if (!preFill) {
+      const firstProp = Object.keys(node.props)[0]
+      if (firstProp) setEditingNodeProp({ nodeId: node.id, propName: firstProp })
+    }
   }
 
   function deleteSelected() {

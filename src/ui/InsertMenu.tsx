@@ -9,10 +9,21 @@ export interface InsertContext {
   expectedType?: string | null
 }
 
+interface SmartCandidate {
+  kind: string
+  preFill: Record<string, string>
+  display: string
+  description: string
+}
+
+type DisplayItem =
+  | ({ type: 'smart' } & SmartCandidate)
+  | { type: 'concept'; kind: string; def: (typeof CONCEPTS)[string]; score: number }
+
 interface Props {
   context: InsertContext
   initialQuery: string
-  onSelect: (kind: string) => void
+  onSelect: (kind: string, preFill?: Record<string, string>) => void
   onClose: () => void
 }
 
@@ -35,6 +46,46 @@ function fuzzyScore(q: string, kind: string, label: string, aliases: string[]): 
   return 0
 }
 
+function detectSmartCandidate(q: string, allowedKinds: string[]): SmartCandidate | null {
+  if (!q) return null
+
+  if (allowedKinds.includes('LiteralExpr')) {
+    if (/^-?\d+(\.\d+)?$/.test(q))
+      return { kind: 'LiteralExpr', preFill: { value: q }, display: q, description: 'number' }
+    if (q === 'true' || q === 'false')
+      return { kind: 'LiteralExpr', preFill: { value: q }, display: q, description: 'bool' }
+    if (q === 'null')
+      return { kind: 'LiteralExpr', preFill: { value: 'null' }, display: 'null', description: 'null' }
+    if (q[0] === '"' || q[0] === "'") {
+      const quote = q[0]
+      const closed = q.length > 1 && q[q.length - 1] === quote ? q : q + quote
+      return { kind: 'LiteralExpr', preFill: { value: closed }, display: closed, description: 'string' }
+    }
+  }
+
+  if (q === '[' && allowedKinds.includes('ArrayLiteralExpr'))
+    return { kind: 'ArrayLiteralExpr', preFill: {}, display: '[ ]', description: 'array' }
+
+  // Identifier: only when no other allowed concept has a strong prefix/exact match
+  if (/^[a-zA-Z_]\w*$/.test(q) && allowedKinds.includes('IdentifierExpr')) {
+    const lower = q.toLowerCase()
+    const strongConceptMatch = allowedKinds
+      .filter(k => k !== 'IdentifierExpr')
+      .some(kind => {
+        const def = CONCEPTS[kind]
+        if (!def) return false
+        return [def.label, ...def.aliases].some(t => {
+          const tl = t.toLowerCase()
+          return tl === lower || tl.startsWith(lower)
+        })
+      })
+    if (!strongConceptMatch)
+      return { kind: 'IdentifierExpr', preFill: { name: q }, display: q, description: 'identifier' }
+  }
+
+  return null
+}
+
 const InsertMenu: Component<Props> = (props) => {
   const [query, setQuery] = createSignal(props.initialQuery)
   const [focusedIdx, setFocusedIdx] = createSignal(0)
@@ -47,7 +98,11 @@ const InsertMenu: Component<Props> = (props) => {
     }
   })
 
-  const candidates = createMemo(() => {
+  const smartCandidate = createMemo((): SmartCandidate | null =>
+    detectSmartCandidate(query(), props.context.allowedKinds)
+  )
+
+  const conceptCandidates = createMemo(() => {
     const q = query()
     return props.context.allowedKinds
       .map(kind => {
@@ -60,26 +115,35 @@ const InsertMenu: Component<Props> = (props) => {
       .sort((a, b) => b.score - a.score)
   })
 
-  function confirm() {
-    const item = candidates()[focusedIdx()]
-    if (item) props.onSelect(item.kind)
+  const allItems = createMemo((): DisplayItem[] => {
+    const items: DisplayItem[] = []
+    const smart = smartCandidate()
+    if (smart) items.push({ type: 'smart', ...smart })
+    for (const c of conceptCandidates()) items.push({ type: 'concept', ...c })
+    return items
+  })
+
+  function selectItem(idx: number) {
+    const item = allItems()[idx]
+    if (!item) return
+    if (item.type === 'smart') { props.onSelect(item.kind, item.preFill); return }
+    // Carry query forward as prop value for value-bearing concepts
+    const q = query().trim()
+    let preFill: Record<string, string> | undefined
+    if (item.kind === 'LiteralExpr' && q && q !== item.def.label)
+      preFill = { value: q }
+    else if (item.kind === 'IdentifierExpr' && /^[a-zA-Z_]\w*$/.test(q) && q !== item.def.label)
+      preFill = { name: q }
+    props.onSelect(item.kind, preFill)
   }
 
   function onKeyDown(e: KeyboardEvent) {
     e.stopPropagation()
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setFocusedIdx(i => Math.min(i + 1, candidates().length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setFocusedIdx(i => Math.max(i - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      confirm()
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      props.onClose()
-    }
+    const count = allItems().length
+    if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedIdx(i => Math.min(i + 1, count - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedIdx(i => Math.max(i - 1, 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); selectItem(focusedIdx()) }
+    else if (e.key === 'Escape') { e.preventDefault(); props.onClose() }
   }
 
   return (
@@ -95,17 +159,26 @@ const InsertMenu: Component<Props> = (props) => {
           ref={inputRef}
           class="insert-query"
           type="text"
-          placeholder="Search node types…"
+          placeholder="type a value or search node types…"
           value={query()}
           onInput={e => { setQuery(e.currentTarget.value); setFocusedIdx(0) }}
           onKeyDown={onKeyDown}
         />
         <div class="insert-candidates">
-          <For each={candidates()}>
-            {(item, i) => (
+          <For each={allItems()}>
+            {(item, i) => item.type === 'smart' ? (
               <div
-                class={`insert-candidate ${i() === focusedIdx() ? 'focused' : ''}`}
-                onClick={() => props.onSelect(item.kind)}
+                class={`insert-candidate insert-smart${i() === focusedIdx() ? ' focused' : ''}`}
+                onClick={() => selectItem(i())}
+                onMouseEnter={() => setFocusedIdx(i())}
+              >
+                <span class="smart-value">{item.display}</span>
+                <span class="smart-desc">{item.description}</span>
+              </div>
+            ) : (
+              <div
+                class={`insert-candidate${i() === focusedIdx() ? ' focused' : ''}`}
+                onClick={() => selectItem(i())}
                 onMouseEnter={() => setFocusedIdx(i())}
               >
                 <span class="candidate-label">{item.def.label}</span>
@@ -114,7 +187,7 @@ const InsertMenu: Component<Props> = (props) => {
               </div>
             )}
           </For>
-          <Show when={candidates().length === 0}>
+          <Show when={allItems().length === 0}>
             <div class="insert-empty">No matching node types</div>
           </Show>
         </div>
