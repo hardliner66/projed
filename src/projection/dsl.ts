@@ -12,13 +12,14 @@ import type { CellDef, ProjectionMap } from './types'
 //      roleName                     ← vertical child list (alone on its line)
 //
 //  Atoms:
-//    kw`text`          keyword-styled label   e.g. kw`fn `
-//    `text`            punct-styled label     e.g. `(`
+//    kw"text"          keyword-styled label   e.g. kw"fn "
+//    "text"            punct-styled label     e.g. "("
 //    @propName         editable property      e.g. @name
 //    >childName        single child slot      e.g. >value
 //    list...           inline child list      e.g. args...
-//    list...(`sep`)    inline list + sep      e.g. params...(`, `)
+//    list...("sep")    inline list + sep      e.g. params...("`, `")
 //
+//  Use \" inside a string to include a literal double-quote.
 //  Comments start with #.  Blank lines are ignored.
 //
 export const DSL_REFERENCE = `\
@@ -32,9 +33,10 @@ export const DSL_REFERENCE = `\
 #    roleName                    ←   vertical child list (alone on line)
 #
 #  Atoms:
-#    kw\`text\`   keyword label     \`text\`   punct label
-#    @propName  property           >child   single child slot
-#    list...    inline list        list...(\`sep\`)  inline + separator
+#    kw"text"   keyword label     "text"   punct label
+#    @propName  property          >child   single child slot
+#    list...    inline list       list...("sep")  inline + separator
+#    Use \\" inside a string for a literal double-quote.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 `
@@ -58,12 +60,19 @@ function isIdentChar(ch: string): boolean {
     return /[A-Za-z0-9_]/.test(ch)
 }
 
-/** Reads from a backtick at src[pos]; returns text inside and the position after the closing backtick. */
-function readBacktick(src: string, pos: number): { text: string; end: number } | null {
-    if (src[pos] !== '`') return null
+/** Reads a double-quoted string at src[pos]; returns the decoded text and the position after the closing quote. */
+function readQuoted(src: string, pos: number): { text: string; end: number } | null {
+    if (src[pos] !== '"') return null
     let i = pos + 1
     let text = ''
-    while (i < src.length && src[i] !== '`') text += src[i++]
+    while (i < src.length && src[i] !== '"') {
+        if (src[i] === '\\' && i + 1 < src.length && src[i + 1] === '"') {
+            text += '"'
+            i += 2
+        } else {
+            text += src[i++]
+        }
+    }
     if (i >= src.length) return null // unterminated
     return { text, end: i + 1 }
 }
@@ -71,17 +80,17 @@ function readBacktick(src: string, pos: number): { text: string; end: number } |
 /** Parse a single separator atom inside `list...(...)`. Returns the CellDef or an error string. */
 function parseSepAtom(src: string, pos: number): { cell: CellDef; end: number } | string {
     while (pos < src.length && (src[pos] === ' ' || src[pos] === '\t')) pos++
-    if (src.startsWith('kw`', pos)) {
-        const r = readBacktick(src, pos + 2)
-        if (!r) return `Unterminated keyword backtick in separator`
+    if (src.startsWith('kw"', pos)) {
+        const r = readQuoted(src, pos + 2)
+        if (!r) return `Unterminated keyword string in separator`
         return { cell: { type: 'label', text: r.text, style: 'keyword' }, end: r.end }
     }
-    if (src[pos] === '`') {
-        const r = readBacktick(src, pos)
-        if (!r) return `Unterminated backtick in separator`
+    if (src[pos] === '"') {
+        const r = readQuoted(src, pos)
+        if (!r) return `Unterminated string in separator`
         return { cell: { type: 'label', text: r.text, style: 'punct' }, end: r.end }
     }
-    return `Expected a backtick literal as separator at position ${pos}`
+    return `Expected a quoted string as separator at position ${pos}`
 }
 
 /** Tokenize a line of atoms. Returns an error string on failure. */
@@ -94,18 +103,18 @@ function tokenizeAtoms(src: string): Atom[] | string {
         if (i >= src.length) break
         if (src[i] === '#') break // rest is comment
 
-        // keyword label: kw`...`
-        if (src.startsWith('kw`', i)) {
-            const r = readBacktick(src, i + 2)
+        // keyword label: kw"..."
+        if (src.startsWith('kw"', i)) {
+            const r = readQuoted(src, i + 2)
             if (!r) return `Unterminated keyword label at position ${i}`
             tokens.push({ kind: 'label', text: r.text, style: 'keyword' })
             i = r.end
             continue
         }
 
-        // punct label: `...`
-        if (src[i] === '`') {
-            const r = readBacktick(src, i)
+        // punct label: "..."
+        if (src[i] === '"') {
+            const r = readQuoted(src, i)
             if (!r) return `Unterminated label at position ${i}`
             tokens.push({ kind: 'label', text: r.text, style: 'punct' })
             i = r.end
@@ -282,8 +291,14 @@ export function parseDsl(text: string): { ok: true; map: ProjectionMap } | { ok:
 
 // ── Serializer ────────────────────────────────────────────────────────────────
 
+/** Escape double-quotes inside a label text for DSL output. */
+function escapeDslString(text: string): string {
+    return text.replace(/"/g, '\\"')
+}
+
 function serializeLabelCell(cell: Extract<CellDef, { type: 'label' }>): string {
-    return cell.style === 'keyword' ? `kw\`${cell.text}\`` : `\`${cell.text}\``
+    const escaped = escapeDslString(cell.text)
+    return cell.style === 'keyword' ? `kw"${escaped}"` : `"${escaped}"`
 }
 
 /** Serialize a single cell as an inline atom string. Returns null if it cannot be expressed as an atom. */
@@ -297,7 +312,7 @@ function serializeAtom(cell: CellDef): string | null {
             return `>${cell.name}`
         case 'childList': {
             if (cell.inline) {
-                const sep = cell.separator ? `(${serializeAtom(cell.separator) ?? '`?`'})` : ''
+                const sep = cell.separator ? `(${serializeAtom(cell.separator) ?? '"?"'})` : ''
                 return `${cell.name}...${sep}`
             }
             return cell.name // bare list — only valid alone on a line
