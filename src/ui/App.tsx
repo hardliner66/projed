@@ -104,7 +104,7 @@ const initialAst = {
                       callee: [{ id: 'id-range', kind: 'IdentifierExpr', props: { name: 'range' }, children: {} }],
                       args: [
                         { id: 'lit-zero', kind: 'LiteralExpr', props: { value: '0' }, children: {} },
-                        { id: 'lit-three', kind: 'LiteralExpr', props: { value: '3' }, children: {} },
+                        { id: 'lit-range-end', kind: 'LiteralExpr', props: { value: '3' }, children: {} },
                       ],
                     },
                   },
