@@ -18,6 +18,7 @@ import {
   switchPreset,
   upsertUserPreset,
 } from '../projection/registry'
+import { parseDsl, serializeDsl, DSL_REFERENCE } from '../projection/dsl'
 
 interface Props {
   model: IrModel
@@ -51,6 +52,7 @@ let canUseNativeSavePicker = true
 
 const ProjectionEditor: Component<Props> = (props) => {
   const [open, setOpen] = createSignal(false)
+  const [editorMode, setEditorMode] = createSignal<'dsl' | 'json'>('dsl')
   const [addOpen, setAddOpen] = createSignal(false)
   const [addMode, setAddMode] = createSignal<'empty' | 'clone'>('clone')
   const [addName, setAddName] = createSignal('')
@@ -59,18 +61,34 @@ const ProjectionEditor: Component<Props> = (props) => {
   const [exportOpen, setExportOpen] = createSignal(false)
   const [exportSelected, setExportSelected] = createSignal<string[]>([])
   const [exportError, setExportError] = createSignal('')
+  // JSON mode state
   const [text, setText] = createSignal('')
   const [baselineText, setBaselineText] = createSignal('')
   const [error, setError] = createSignal('')
   const [previewMap, setPreviewMap] = createSignal<ProjectionMap | null>(null)
   const [editorUndo, setEditorUndo] = createSignal<string[]>([])
   const [editorRedo, setEditorRedo] = createSignal<string[]>([])
+  // DSL mode state
+  const [dslText, setDslText] = createSignal('')
+  const [dslBaselineText, setDslBaselineText] = createSignal('')
+  const [dslError, setDslError] = createSignal('')
+  const [dslPreviewMap, setDslPreviewMap] = createSignal<ProjectionMap | null>(null)
+  const [dslUndo, setDslUndo] = createSignal<string[]>([])
+  const [dslRedo, setDslRedo] = createSignal<string[]>([])
+  // Manager undo/redo
   const [managerUndo, setManagerUndo] = createSignal<ManagerSnapshot[]>([])
   const [managerRedo, setManagerRedo] = createSignal<ManagerSnapshot[]>([])
   let importInputRef: HTMLInputElement | undefined
 
   const canEditActive = createMemo(() => !isBuiltinPreset(activePresetName()))
-  const hasUnsavedChanges = createMemo(() => text() !== baselineText())
+  const hasUnsavedChanges = createMemo(() =>
+    editorMode() === 'dsl'
+      ? dslText() !== dslBaselineText()
+      : text() !== baselineText()
+  )
+  const effectivePreviewMap = createMemo(() =>
+    editorMode() === 'dsl' ? dslPreviewMap() : previewMap()
+  )
 
   function currentSnapshot(): ManagerSnapshot {
     return {
@@ -112,6 +130,20 @@ const ProjectionEditor: Component<Props> = (props) => {
     setEditorUndo([])
     setEditorRedo([])
     setError('')
+    // Initialise DSL state by serializing the current projection map
+    try {
+      const map = JSON.parse(raw) as ProjectionMap
+      const dsl = DSL_REFERENCE + '\n' + serializeDsl(map)
+      setDslText(dsl)
+      setDslBaselineText(dsl)
+    } catch {
+      setDslText(DSL_REFERENCE)
+      setDslBaselineText(DSL_REFERENCE)
+    }
+    setDslPreviewMap(null)
+    setDslUndo([])
+    setDslRedo([])
+    setDslError('')
     setOpen(true)
   }
 
@@ -166,20 +198,110 @@ const ProjectionEditor: Component<Props> = (props) => {
   }
 
   function onSave() {
-    const result = loadProjectionJson(text())
-    if (!result.ok) {
-      setError(result.error)
-      return
+    if (editorMode() === 'dsl') {
+      const result = parseDsl(dslText())
+      if (!result.ok) { setDslError(result.error); return }
+      const loadResult = loadProjectionJson(JSON.stringify(result.map))
+      if (!loadResult.ok) { setDslError(loadResult.error); return }
+      setDslError('')
+      setDslBaselineText(dslText())
+      // Sync JSON tab to reflect the saved state
+      const saved = getProjectionJson()
+      setText(saved)
+      setBaselineText(saved)
+    } else {
+      const result = loadProjectionJson(text())
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      setError('')
+      setBaselineText(text())
+      // Sync DSL tab
+      try {
+        const map = JSON.parse(text()) as ProjectionMap
+        const dsl = DSL_REFERENCE + '\n' + serializeDsl(map)
+        setDslText(dsl)
+        setDslBaselineText(dsl)
+      } catch { /* leave DSL tab as-is */ }
     }
-    setError('')
-    setBaselineText(text())
+  }
+
+  // ── DSL mode helpers ────────────────────────────────────────────────────────
+
+  function saveDslTextValue(next: string) {
+    const old = dslText()
+    if (old === next) return
+    setDslUndo(prev => [...prev, old])
+    setDslRedo([])
+    setDslText(next)
+    const result = parseDsl(next)
+    if (result.ok) {
+      setDslPreviewMap(result.map)
+      setDslError('')
+    } else {
+      setDslPreviewMap(null)
+      setDslError(result.error)
+    }
+  }
+
+  function undoDsl() {
+    const stack = dslUndo()
+    if (stack.length === 0) return
+    const prev = stack[stack.length - 1]
+    setDslUndo(stack.slice(0, -1))
+    setDslRedo(r => [...r, dslText()])
+    setDslText(prev)
+    const result = parseDsl(prev)
+    if (result.ok) { setDslPreviewMap(result.map); setDslError('') }
+    else { setDslPreviewMap(null); setDslError(result.error) }
+  }
+
+  function redoDsl() {
+    const stack = dslRedo()
+    if (stack.length === 0) return
+    const next = stack[stack.length - 1]
+    setDslRedo(stack.slice(0, -1))
+    setDslUndo(u => [...u, dslText()])
+    setDslText(next)
+    const result = parseDsl(next)
+    if (result.ok) { setDslPreviewMap(result.map); setDslError('') }
+    else { setDslPreviewMap(null); setDslError(result.error) }
+  }
+
+  function onSwitchMode(newMode: 'dsl' | 'json') {
+    if (editorMode() === newMode) return
+    if (newMode === 'json') {
+      // Sync JSON textarea from DSL if the DSL is currently valid
+      const result = parseDsl(dslText())
+      if (result.ok) {
+        const json = JSON.stringify(result.map, null, 2)
+        setText(json)
+        setBaselineText(json)
+        setPreviewMap(result.map)
+        setError('')
+      }
+    } else {
+      // Sync DSL textarea from JSON if JSON is currently valid
+      try {
+        const map = JSON.parse(text()) as ProjectionMap
+        const dsl = DSL_REFERENCE + '\n' + serializeDsl(map)
+        setDslText(dsl)
+        setDslBaselineText(dsl)
+        setDslPreviewMap(map)
+        setDslError('')
+      } catch { /* leave DSL as-is */ }
+    }
+    setEditorMode(newMode)
   }
 
   function onExit() {
     if (hasUnsavedChanges() && !window.confirm('You have unsaved changes. Exit anyway?')) return
     setOpen(false)
     setError('')
+    setDslError('')
     setPreviewMap(null)
+    setDslPreviewMap(null)
   }
 
   function onAdd() {
@@ -433,23 +555,60 @@ const ProjectionEditor: Component<Props> = (props) => {
             <div class="projection-editor-header">
               <div>Projection Editor: {activePresetName()}</div>
               <div class="projection-editor-actions">
-                <button class="toolbar-btn" onClick={undoEditor} disabled={editorUndo().length === 0}>Undo</button>
-                <button class="toolbar-btn" onClick={redoEditor} disabled={editorRedo().length === 0}>Redo</button>
+                <button
+                  class="toolbar-btn"
+                  onClick={() => editorMode() === 'dsl' ? undoDsl() : undoEditor()}
+                  disabled={editorMode() === 'dsl' ? dslUndo().length === 0 : editorUndo().length === 0}
+                >Undo</button>
+                <button
+                  class="toolbar-btn"
+                  onClick={() => editorMode() === 'dsl' ? redoDsl() : redoEditor()}
+                  disabled={editorMode() === 'dsl' ? dslRedo().length === 0 : editorRedo().length === 0}
+                >Redo</button>
                 <button class="toolbar-btn" onClick={onSave}>Save</button>
                 <button class="toolbar-btn" onClick={onExit}>Exit</button>
               </div>
             </div>
 
+            {/* Mode tabs */}
+            <div class="projection-editor-tabs">
+              <button
+                class="projection-tab"
+                classList={{ active: editorMode() === 'dsl' }}
+                onClick={() => onSwitchMode('dsl')}
+              >DSL</button>
+              <button
+                class="projection-tab"
+                classList={{ active: editorMode() === 'json' }}
+                onClick={() => onSwitchMode('json')}
+              >JSON</button>
+            </div>
+
             <div class="projection-editor-body">
               <div class="projection-editor-pane">
-                <textarea
-                  class="projection-textarea projection-editor-textarea"
-                  value={text()}
-                  onInput={(e) => saveTextValue(e.currentTarget.value)}
-                  spellcheck={false}
-                />
-                <Show when={error()}>
-                  <div class="modal-error">{error()}</div>
+                <Show when={editorMode() === 'dsl'} fallback={
+                  <>
+                    <textarea
+                      class="projection-textarea projection-editor-textarea"
+                      value={text()}
+                      onInput={(e) => saveTextValue(e.currentTarget.value)}
+                      spellcheck={false}
+                    />
+                    <Show when={error()}>
+                      <div class="modal-error">{error()}</div>
+                    </Show>
+                  </>
+                }>
+                  <textarea
+                    class="projection-textarea projection-editor-textarea dsl-textarea"
+                    value={dslText()}
+                    onInput={(e) => saveDslTextValue(e.currentTarget.value)}
+                    spellcheck={false}
+                    placeholder="# Write projection rules here..."
+                  />
+                  <Show when={dslError()}>
+                    <div class="modal-error">{dslError()}</div>
+                  </Show>
                 </Show>
               </div>
 
@@ -460,7 +619,7 @@ const ProjectionEditor: Component<Props> = (props) => {
                     nodeId={props.model.rootId}
                     model={props.model}
                     onCommand={() => { }}
-                    projectionMap={previewMap() ?? getPresetProjection(activePresetName()) ?? {}}
+                    projectionMap={effectivePreviewMap() ?? getPresetProjection(activePresetName()) ?? {}}
                   />
                 </main>
               </div>
